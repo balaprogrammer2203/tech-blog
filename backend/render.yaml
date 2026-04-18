@@ -1,0 +1,13 @@
+# Render Blueprint (optional): https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: tech-blog-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: node dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
