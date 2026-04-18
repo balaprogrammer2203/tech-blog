@@ -11,7 +11,6 @@ import { RegisterPage } from "@/pages/RegisterPage";
 import { MyPostsPage } from "@/pages/MyPostsPage";
 
 const BookmarksPage = lazy(() => import("@/pages/BookmarksPage").then((m) => ({ default: m.BookmarksPage })));
-const WritePage = lazy(() => import("@/pages/WritePage").then((m) => ({ default: m.WritePage })));
 
 export default function App() {
   return (
@@ -38,26 +37,6 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <MyPostsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="write"
-            element={
-              <ProtectedRoute>
-                <Suspense fallback={<p className="text-sm text-ink-muted">Loading…</p>}>
-                  <WritePage />
-                </Suspense>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="write/:postId"
-            element={
-              <ProtectedRoute>
-                <Suspense fallback={<p className="text-sm text-ink-muted">Loading…</p>}>
-                  <WritePage />
-                </Suspense>
               </ProtectedRoute>
             }
           />

@@ -23,9 +23,6 @@ export function MyPostsPage() {
               </p>
             </div>
             <div className="flex gap-2 text-sm">
-              <Link className="rounded border border-gray-200 px-2 py-1 dark:border-gray-700" to={`/write/${p.id}`}>
-                Edit
-              </Link>
               <button
                 type="button"
                 className="rounded border border-red-200 px-2 py-1 text-red-700 dark:border-red-900 dark:text-red-300"

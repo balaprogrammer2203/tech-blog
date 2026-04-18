@@ -86,13 +86,6 @@ export function MobileNavDrawer({
           {user ? (
             <>
               <Link
-                to="/write"
-                className="block rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-900"
-                onClick={onClose}
-              >
-                Write
-              </Link>
-              <Link
                 to="/me"
                 className="block rounded-lg px-3 py-2.5 text-sm font-medium text-ink hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-900"
                 onClick={onClose}

@@ -49,12 +49,6 @@ export function SiteHeader() {
                 {user ? (
                   <>
                     <Link
-                      to="/write"
-                      className="rounded-lg px-3 py-2 text-sm font-medium text-ink-muted transition hover:bg-gray-100 hover:text-ink dark:hover:bg-gray-900 dark:hover:text-gray-100"
-                    >
-                      Write
-                    </Link>
-                    <Link
                       to="/me"
                       className="rounded-lg px-3 py-2 text-sm font-medium text-ink-muted transition hover:bg-gray-100 hover:text-ink dark:hover:bg-gray-900 dark:hover:text-gray-100"
                     >

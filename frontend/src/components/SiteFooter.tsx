@@ -33,11 +33,6 @@ export function SiteFooter() {
             <div className="text-xs font-bold uppercase tracking-wider text-ink-muted">Authors</div>
             <ul className="mt-3 space-y-2 text-sm">
               <li>
-                <Link to="/write" className="text-ink-muted hover:text-emerald-700 dark:hover:text-emerald-400">
-                  Write a post
-                </Link>
-              </li>
-              <li>
                 <Link to="/me" className="text-ink-muted hover:text-emerald-700 dark:hover:text-emerald-400">
                   Your posts
                 </Link>
