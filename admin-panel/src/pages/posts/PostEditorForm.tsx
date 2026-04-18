@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Autocomplete,
+  Box,
   Button,
+  Chip,
+  CircularProgress,
   FormControl,
   InputLabel,
   MenuItem,
@@ -11,15 +15,31 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import type { JSONContent } from "@tiptap/core";
+import { useSelector } from "react-redux";
 import {
   useAdminPostDetailQuery,
   useAdminUsersQuery,
   useCategoriesTreeQuery,
   useCreateAdminPostMutation,
+  usePublicTagsQuery,
   useUpdateAdminPostMutation,
 } from "@/store/baseApi";
+import type { PostTag } from "@/types/tags";
+import type { RootState } from "@/store/store";
 import type { CategoryChild } from "@/types/categories";
 import { apiErrorMessage } from "../categories/apiErrorMessage";
+import {
+  EMPTY_POST_DOC,
+  normalizePostContent,
+  tiptapDocumentHasMeaningfulContent,
+} from "@/lib/markdownToTiptapDoc";
+import { uploadPostImage } from "@/lib/uploadPostImage";
+
+const PostTiptapEditor = lazy(async () => {
+  const m = await import("@/lib/postTiptap/PostTiptapEditor");
+  return { default: m.PostTiptapEditor };
+});
 
 function flattenLeaves(roots: { children: CategoryChild[] }[] | undefined): { id: string; label: string }[] {
   if (!roots) return [];
@@ -46,11 +66,22 @@ export function PostEditorForm(props: Props) {
     { page: 1, limit: 100, sortField: "email", sortOrder: "asc" },
     { skip: props.mode !== "create" }
   );
+  const token = useSelector((s: RootState) => s.auth.accessToken);
+  const apiBase = import.meta.env.VITE_API_URL as string;
 
   const [title, setTitle] = useState("");
   const [excerpt, setExcerpt] = useState("");
-  const [content, setContent] = useState("");
-  const [tags, setTags] = useState("");
+  const [contentDoc, setContentDoc] = useState<JSONContent>(EMPTY_POST_DOC);
+  const [selectedTags, setSelectedTags] = useState<PostTag[]>([]);
+  const { data: tagsData } = usePublicTagsQuery();
+  const catalogTags = tagsData?.items ?? [];
+  const tagOptions = useMemo(() => {
+    const byId = new Map(catalogTags.map((t) => [t.id, t]));
+    for (const s of selectedTags) {
+      if (!byId.has(s.id)) byId.set(s.id, s);
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [catalogTags, selectedTags]);
   const [status, setStatus] = useState<"draft" | "published">("draft");
   const [categoryId, setCategoryId] = useState("");
   const [coverImageUrl, setCoverImageUrl] = useState("");
@@ -61,13 +92,18 @@ export function PostEditorForm(props: Props) {
   const [createPost, { isLoading: creating }] = useCreateAdminPostMutation();
   const [updatePost, { isLoading: updating }] = useUpdateAdminPostMutation();
 
+  const uploadImage = useCallback(
+    (file: File) => uploadPostImage({ apiBaseUrl: apiBase, token, file }),
+    [apiBase, token]
+  );
+
   useEffect(() => {
     setFormError(null);
     if (props.mode === "create") {
       setTitle("");
       setExcerpt("");
-      setContent("");
-      setTags("");
+      setContentDoc(EMPTY_POST_DOC);
+      setSelectedTags([]);
       setStatus("draft");
       setCategoryId("");
       setCoverImageUrl("");
@@ -78,8 +114,8 @@ export function PostEditorForm(props: Props) {
     if (!detail) return;
     setTitle(detail.title);
     setExcerpt(detail.excerpt);
-    setContent(detail.content);
-    setTags(detail.tags?.join(", ") ?? "");
+    setContentDoc(normalizePostContent(detail.content));
+    setSelectedTags(detail.tags ?? []);
     setStatus(detail.status as "draft" | "published");
     setCategoryId(detail.category?.id ?? "");
     setCoverImageUrl(detail.coverImageUrl ?? "");
@@ -94,18 +130,18 @@ export function PostEditorForm(props: Props) {
       setFormError("Select a leaf category before publishing.");
       return;
     }
-    const tagsArr = tags
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean)
-      .slice(0, 5);
+    if (!tiptapDocumentHasMeaningfulContent(contentDoc)) {
+      setFormError("Add some body content (text, code, or an image) before saving.");
+      return;
+    }
+    const tagIds = selectedTags.map((t) => t.id).slice(0, 5);
     try {
       if (props.mode === "create") {
         const res = await createPost({
           title,
           excerpt,
-          content,
-          tags: tagsArr,
+          content: contentDoc,
+          tags: tagIds,
           status,
           categoryId: categoryId || undefined,
           coverImageUrl: coverImageUrl.trim() || undefined,
@@ -119,8 +155,8 @@ export function PostEditorForm(props: Props) {
           body: {
             title,
             excerpt,
-            content,
-            tags: tagsArr,
+            content: contentDoc,
+            tags: tagIds,
             status,
             categoryId: categoryId || "",
             coverImageUrl: coverImageUrl.trim() || undefined,
@@ -135,7 +171,7 @@ export function PostEditorForm(props: Props) {
   }
 
   return (
-    <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 800, width: "100%", borderRadius: 2 }}>
+    <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 900, width: "100%", borderRadius: 2 }}>
       {props.mode === "edit" && isFetching && !detail && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Loading post…
@@ -149,21 +185,47 @@ export function PostEditorForm(props: Props) {
       <Stack spacing={2}>
         <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} required fullWidth />
         <TextField label="Excerpt" value={excerpt} onChange={(e) => setExcerpt(e.target.value)} required fullWidth multiline minRows={2} />
-        <TextField
-          label="Content (Markdown)"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          required
-          fullWidth
-          multiline
-          minRows={14}
-        />
-        <TextField
-          label="Tags (comma-separated, max 5)"
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-          fullWidth
-          helperText="Example: react, tutorial, api"
+        <Box>
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.75 }}>
+            Content
+          </Typography>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+            Rich text with headings, lists, links, images (upload to Cloudinary when configured), and highlighted code blocks.
+          </Typography>
+          <Suspense
+            fallback={
+              <Box sx={{ py: 4, display: "flex", justifyContent: "center" }}>
+                <CircularProgress size={28} />
+              </Box>
+            }
+          >
+            <PostTiptapEditor
+              value={contentDoc}
+              onChange={setContentDoc}
+              disabled={saving || (props.mode === "edit" && isFetching && !detail)}
+              uploadImage={uploadImage}
+            />
+          </Suspense>
+        </Box>
+        <Autocomplete
+          multiple
+          options={tagOptions}
+          getOptionLabel={(o) => o.name}
+          value={selectedTags}
+          onChange={(_, v) => setSelectedTags(v.slice(0, 5))}
+          isOptionEqualToValue={(a, b) => a.id === b.id}
+          renderTags={(value, getTagProps) =>
+            value.map((option, index) => (
+              <Chip {...getTagProps({ index })} key={option.id} size="small" label={option.name} />
+            ))
+          }
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Tags"
+              helperText="Pick up to five tags from the catalog. Each choice saves the tag id plus its current name on the post (updated if you rename the tag later)."
+            />
+          )}
         />
         <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
           <FormControl fullWidth>

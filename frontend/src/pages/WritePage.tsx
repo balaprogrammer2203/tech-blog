@@ -3,10 +3,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   useCreatePostMutation,
   useGetPostByIdQuery,
+  usePublicTagsQuery,
   useUpdatePostMutation,
   useUploadImageMutation,
 } from "@/store/baseApi";
-import { estimateReadMinutes } from "@/lib/readTime";
+import { estimateReadMinutes, estimateReadMinutesFromPost } from "@/lib/readTime";
 
 const MAX_TAGS = 5;
 
@@ -14,6 +15,7 @@ export function WritePage() {
   const { postId } = useParams();
   const navigate = useNavigate();
   const { data, isLoading } = useGetPostByIdQuery(postId ?? "", { skip: !postId });
+  const { data: tagCatalog } = usePublicTagsQuery();
   const [createPost, { isLoading: creating }] = useCreatePostMutation();
   const [updatePost, { isLoading: updating }] = useUpdatePostMutation();
   const [upload, { isLoading: uploading }] = useUploadImageMutation();
@@ -21,7 +23,7 @@ export function WritePage() {
   const [title, setTitle] = useState("");
   const [excerpt, setExcerpt] = useState("");
   const [content, setContent] = useState("");
-  const [tagsInput, setTagsInput] = useState("");
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [status, setStatus] = useState<"draft" | "published">("draft");
   const [coverImageUrl, setCoverImageUrl] = useState("");
 
@@ -29,31 +31,56 @@ export function WritePage() {
     if (!data) return;
     setTitle(data.title);
     setExcerpt(data.excerpt);
-    setContent(data.content);
-    setTagsInput((data.tags ?? []).join(", "));
+    setContent(typeof data.content === "string" ? data.content : JSON.stringify(data.content, null, 2));
+    setSelectedTagIds((data.tags ?? []).map((t) => t.id));
     setStatus((data.status as "draft" | "published") ?? "draft");
     setCoverImageUrl(data.coverImageUrl ?? "");
   }, [data]);
 
-  const tags = useMemo(
-    () =>
-      tagsInput
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean)
-        .slice(0, MAX_TAGS),
-    [tagsInput]
-  );
+  const tagOptions = useMemo(() => tagCatalog?.items ?? [], [tagCatalog?.items]);
 
-  const readTimeMinutes = useMemo(() => estimateReadMinutes(content), [content]);
+  const readTimeMinutes = useMemo(() => {
+    const trimmed = content.trim();
+    if (trimmed.startsWith("{")) {
+      try {
+        return estimateReadMinutesFromPost(JSON.parse(trimmed) as unknown);
+      } catch {
+        /* ignore */
+      }
+    }
+    return estimateReadMinutes(content);
+  }, [content]);
+
+  function parseBodyContent(raw: string): string | Record<string, unknown> {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("{")) {
+      try {
+        const o = JSON.parse(trimmed) as unknown;
+        if (o && typeof o === "object" && !Array.isArray(o) && (o as { type?: string }).type === "doc") {
+          return o as Record<string, unknown>;
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+    return raw;
+  }
+
+  function toggleTag(id: string) {
+    setSelectedTagIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= MAX_TAGS) return prev;
+      return [...prev, id];
+    });
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const payload = {
       title,
       excerpt,
-      content,
-      tags,
+      content: parseBodyContent(content),
+      tags: selectedTagIds,
       status,
       readTimeMinutes,
       ...(coverImageUrl ? { coverImageUrl } : {}),
@@ -114,12 +141,23 @@ export function WritePage() {
           <p className="mt-1 text-xs text-ink-muted">Estimated read: {readTimeMinutes} min (sent with save)</p>
         </div>
         <div>
-          <label className="text-sm text-ink-muted">Tags (comma-separated, max {MAX_TAGS})</label>
-          <input
-            className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
-            value={tagsInput}
-            onChange={(e) => setTagsInput(e.target.value)}
-          />
+          <label className="text-sm text-ink-muted">Tags (from catalog, max {MAX_TAGS})</label>
+          <p className="mt-1 text-xs text-ink-muted">Admins maintain the tag list; pick any combination up to five.</p>
+          <div className="mt-2 flex max-h-48 flex-col gap-2 overflow-y-auto rounded-md border border-gray-200 p-2 dark:border-gray-700">
+            {tagOptions.length === 0 && <span className="text-xs text-ink-muted">No tags available yet.</span>}
+            {tagOptions.map((t) => (
+              <label key={t.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selectedTagIds.includes(t.id)}
+                  onChange={() => toggleTag(t.id)}
+                  disabled={!selectedTagIds.includes(t.id) && selectedTagIds.length >= MAX_TAGS}
+                />
+                <span>{t.name}</span>
+                <span className="text-xs text-ink-muted">({t.slug})</span>
+              </label>
+            ))}
+          </div>
         </div>
         <div>
           <label className="text-sm text-ink-muted">Cover image</label>

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import {
   Alert,
   Box,
   Button,
   Chip,
   Divider,
+  CircularProgress,
   Paper,
   Stack,
   Typography,
@@ -17,6 +18,12 @@ import { useAdminPostDetailQuery } from "@/store/baseApi";
 import { DeletePostDialog } from "./DeletePostDialog";
 import { apiErrorMessage } from "../categories/apiErrorMessage";
 import { isMongoObjectId } from "../categories/isMongoObjectId";
+import { normalizePostContent } from "@/lib/markdownToTiptapDoc";
+
+const PostTiptapViewer = lazy(async () => {
+  const m = await import("@/lib/postTiptap/PostTiptapViewer");
+  return { default: m.PostTiptapViewer };
+});
 
 export function PostViewPage() {
   const { postId = "" } = useParams<{ postId: string }>();
@@ -98,25 +105,35 @@ export function PostViewPage() {
           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
             Content
           </Typography>
-          <Box
-            component="pre"
-            sx={{
-              m: 0,
-              p: 2,
-              bgcolor: "action.hover",
-              borderRadius: 1,
-              overflow: "auto",
-              fontSize: "0.8125rem",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-            }}
+          <Suspense
+            fallback={
+              <Box sx={{ py: 2, display: "flex", justifyContent: "center" }}>
+                <CircularProgress size={24} />
+              </Box>
+            }
           >
-            {data.content}
-          </Box>
+            <PostTiptapViewer doc={normalizePostContent(data.content)} />
+          </Suspense>
           {data.tags?.length ? (
-            <Typography variant="body2" sx={{ mt: 2 }} color="text.secondary">
-              Tags: {data.tags.join(", ")}
-            </Typography>
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Tags
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {data.tags.map((t) => (
+                  <Chip
+                    key={t.id}
+                    component={RouterLink}
+                    to={`/tags/${t.id}`}
+                    clickable
+                    size="small"
+                    label={t.name}
+                    title={`${t.slug} · id ${t.id}`}
+                    variant="outlined"
+                  />
+                ))}
+              </Stack>
+            </Box>
           ) : null}
           <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2 }}>
             Updated {data.updatedAt ? new Date(data.updatedAt).toLocaleString() : "—"}

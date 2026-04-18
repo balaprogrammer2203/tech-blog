@@ -7,7 +7,7 @@ import { hashToken } from "../utils/tokenHash.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { HttpError } from "../middleware/errorHandler.js";
 import { authMiddleware, type AuthedRequest } from "../middleware/auth.js";
-import { loginSchema, registerSchema } from "../validators/schemas.js";
+import { changePasswordSchema, loginSchema, registerSchema, selfUpdateProfileSchema } from "../validators/schemas.js";
 
 const REFRESH_COOKIE = "rt";
 
@@ -114,6 +114,35 @@ export function createAuthRouter(env: Env) {
       res.json({
         user: { id: String(user._id), email: user.email, name: user.name, role: user.role },
       });
+    })
+  );
+
+  router.patch(
+    "/me",
+    authMiddleware(env),
+    asyncHandler(async (req: AuthedRequest, res) => {
+      const body = selfUpdateProfileSchema.parse(req.body);
+      const user = await User.findByIdAndUpdate(req.user!.id, { name: body.name }, { new: true }).select("email name role").lean();
+      if (!user) throw new HttpError(404, "Not found");
+      res.json({
+        user: { id: String(user._id), email: user.email, name: user.name, role: user.role },
+      });
+    })
+  );
+
+  router.post(
+    "/change-password",
+    authMiddleware(env),
+    asyncHandler(async (req: AuthedRequest, res) => {
+      const body = changePasswordSchema.parse(req.body);
+      const user = await User.findById(req.user!.id).select("+passwordHash");
+      if (!user?.passwordHash) throw new HttpError(401, "Unauthorized");
+      if (!(await verifyPassword(body.currentPassword, user.passwordHash))) {
+        throw new HttpError(401, "Current password is incorrect");
+      }
+      user.passwordHash = await hashPassword(body.newPassword);
+      await user.save();
+      res.status(204).end();
     })
   );
 

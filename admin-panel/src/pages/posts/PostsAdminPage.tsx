@@ -25,7 +25,7 @@ import UnpublishedIcon from "@mui/icons-material/Unpublished";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   DataGrid,
   type GridColDef,
@@ -75,12 +75,14 @@ const defaultSort: GridSortModel = [{ field: "updatedAt", sort: "desc" }];
 
 export function PostsAdminPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const qFromUrl = searchParams.get("q") ?? "";
   const apiBase = import.meta.env.VITE_API_URL as string;
   const token = useSelector((s: RootState) => s.auth.accessToken);
 
   const knownRowsRef = useRef(new Map<string, AdminPostListRow>());
 
-  const [searchInput, setSearchInput] = useState("");
+  const [searchInput, setSearchInput] = useState(qFromUrl);
   const [debouncedQ, setDebouncedQ] = useState("");
   const [status, setStatus] = useState<"" | "draft" | "published">("");
   const [categorySlug, setCategorySlug] = useState("");
@@ -97,6 +99,10 @@ export function PostsAdminPage() {
 
   const { data: tree } = useCategoriesTreeQuery();
   const leafOptions = useMemo(() => flattenLeaves(tree?.roots), [tree?.roots]);
+
+  useEffect(() => {
+    setSearchInput((prev) => (qFromUrl !== prev ? qFromUrl : prev));
+  }, [qFromUrl]);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQ(searchInput.trim()), 400);

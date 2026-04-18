@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -14,7 +14,17 @@ import {
   useToggleLikeMutation,
 } from "@/store/baseApi";
 import { useAppSelector } from "@/store/hooks";
-import { estimateReadMinutes } from "@/lib/readTime";
+import type { JSONContent } from "@tiptap/core";
+import { estimateReadMinutesFromPost } from "@/lib/readTime";
+
+const PostTiptapArticle = lazy(async () => {
+  const m = await import("@/lib/postTiptap/PostTiptapArticle");
+  return { default: m.PostTiptapArticle };
+});
+
+function isTiptapDocContent(c: unknown): c is JSONContent {
+  return typeof c === "object" && c !== null && !Array.isArray(c) && (c as { type?: string }).type === "doc";
+}
 
 export function ArticlePage() {
   const { slug = "" } = useParams();
@@ -34,7 +44,7 @@ export function ArticlePage() {
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState("");
 
-  const clientRead = useMemo(() => (post ? estimateReadMinutes(post.content) : 0), [post]);
+  const clientRead = useMemo(() => (post ? estimateReadMinutesFromPost(post.content) : 0), [post]);
 
   if (isLoading) return <p className="text-sm text-ink-muted">Loading article…</p>;
   if (isError || !post) {
@@ -68,8 +78,8 @@ export function ArticlePage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {post.tags?.map((t) => (
-            <span key={t} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs dark:bg-gray-800">
-              {t}
+            <span key={t.id} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs dark:bg-gray-800">
+              {t.name}
             </span>
           ))}
         </div>
@@ -104,9 +114,15 @@ export function ArticlePage() {
       {post.coverImageUrl && (
         <img src={post.coverImageUrl} alt="" className="w-full rounded-lg object-cover" loading="lazy" />
       )}
-      <div className="prose prose-neutral max-w-none dark:prose-invert">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{post.content}</ReactMarkdown>
-      </div>
+      {isTiptapDocContent(post.content) ? (
+        <Suspense fallback={<p className="text-sm text-ink-muted">Loading article body…</p>}>
+          <PostTiptapArticle doc={post.content} />
+        </Suspense>
+      ) : (
+        <div className="prose prose-neutral max-w-none dark:prose-invert">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{String(post.content)}</ReactMarkdown>
+        </div>
+      )}
       <section className="border-t border-gray-100 pt-8 dark:border-gray-800">
         <h2 className="font-serif text-2xl font-semibold">Comments</h2>
         {user ? (

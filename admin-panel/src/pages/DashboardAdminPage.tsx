@@ -168,21 +168,6 @@ export function DashboardAdminPage() {
             <StatCard label="Reports dismissed" value={data.reports.dismissed} />
           </Box>
 
-          <Stack direction={{ xs: "column", sm: "row" }} flexWrap="wrap" useFlexGap spacing={1} sx={{ mb: 3 }}>
-            <Button component={RouterLink} to="/posts" variant="contained" size="small" sx={{ width: { xs: "100%", sm: "auto" } }}>
-              Manage posts
-            </Button>
-            <Button component={RouterLink} to="/categories" variant="outlined" size="small" sx={{ width: { xs: "100%", sm: "auto" } }}>
-              Categories
-            </Button>
-            <Button component={RouterLink} to="/users" variant="outlined" size="small" sx={{ width: { xs: "100%", sm: "auto" } }}>
-              Users
-            </Button>
-            <Button component={RouterLink} to="/reports" variant="outlined" size="small" sx={{ width: { xs: "100%", sm: "auto" } }}>
-              Reports
-            </Button>
-          </Stack>
-
           <Divider sx={{ my: 2 }} />
 
           <Box
@@ -306,7 +291,7 @@ export function DashboardAdminPage() {
                       </TableRow>
                     ) : (
                       data.pendingReports.map((r) => (
-                        <TableRow key={r.id} hover>
+                        <TableRow key={r.id} hover component={RouterLink} to={`/reports/${r.id}`} sx={{ cursor: "pointer" }}>
                           <TableCell sx={{ whiteSpace: "nowrap" }}>
                             {r.targetType} · {r.targetId.slice(0, 8)}…
                           </TableCell>

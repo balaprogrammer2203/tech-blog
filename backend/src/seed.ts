@@ -2,7 +2,7 @@
  * Seeds the database with deterministic demo data.
  * Run: npm run seed  (requires MONGODB_URI in .env)
  *
- * Clears: reports, likes, bookmarks, comments, posts, categories, users — then inserts fresh rows.
+ * Clears: reports, likes, bookmarks, comments, posts, tags, categories, users — then inserts fresh rows.
  * Login after seed: admin@seed.local / password123  or  user@seed.local / password123
  */
 import "dotenv/config";
@@ -10,14 +10,27 @@ import mongoose from "mongoose";
 import { hashPassword } from "./utils/password.js";
 import { User } from "./models/User.js";
 import { Category } from "./models/Category.js";
+import { Tag } from "./models/Tag.js";
 import { Post, type PostDoc } from "./models/Post.js";
+import { markdownSeedToTiptapDoc } from "./seed/markdownToTiptapDoc.js";
 import { Comment } from "./models/Comment.js";
 import { Like } from "./models/Like.js";
 import { Bookmark } from "./models/Bookmark.js";
 import { Report } from "./models/Report.js";
-import { SEED_ARTICLES, type SeedArticleCategorySlug } from "./seed/postContents.js";
+import { SEED_ARTICLES, type SeedArticleCategorySlug, type SeedArticleDef } from "./seed/postContents.js";
+import { slugify } from "./utils/slug.js";
+import { assertValidTiptapContent } from "./validators/tiptapDoc.js";
 
 const passwordPlain = "password123";
+
+function normalizeSeedArticleContent(def: SeedArticleDef): unknown {
+  const raw = def.content;
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+    assertValidTiptapContent(raw);
+    return raw;
+  }
+  return markdownSeedToTiptapDoc(raw as string);
+}
 
 /** Fixed UTC timestamps so seeded categories look like realistic historical data. */
 function catDate(year: number, monthIndex: number, day: number, hour = 12, minute = 0): Date {
@@ -140,6 +153,31 @@ async function seedCategories(): Promise<Record<SeedArticleCategorySlug, mongoos
   };
 }
 
+type SeedTagEmbed = { tagId: mongoose.Types.ObjectId; name: string; slug: string };
+
+async function seedTags(): Promise<Map<string, SeedTagEmbed>> {
+  const unique = new Set<string>();
+  for (const a of SEED_ARTICLES) {
+    for (const t of a.tags) unique.add(t);
+  }
+  const sorted = [...unique].sort((a, b) => a.localeCompare(b));
+  const docs = sorted.map((raw, idx) => {
+    const slug = slugify(raw);
+    const name = raw
+      .split("-")
+      .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : ""))
+      .filter(Boolean)
+      .join(" ");
+    return { name, slug, sortOrder: idx };
+  });
+  const inserted = await Tag.insertMany(docs);
+  const bySlug = new Map<string, SeedTagEmbed>();
+  for (const t of inserted) {
+    bySlug.set(t.slug, { tagId: t._id, name: t.name, slug: t.slug });
+  }
+  return bySlug;
+}
+
 async function main(): Promise<void> {
   const uri = process.env.MONGODB_URI;
   if (!uri) {
@@ -155,6 +193,7 @@ async function main(): Promise<void> {
   await Bookmark.deleteMany({});
   await Comment.deleteMany({});
   await Post.deleteMany({});
+  await Tag.deleteMany({});
   await Category.deleteMany({});
   await User.deleteMany({});
 
@@ -174,6 +213,7 @@ async function main(): Promise<void> {
   });
 
   const categories = await seedCategories();
+  const tagBySlug = await seedTags();
 
   const now = new Date();
 
@@ -186,13 +226,17 @@ async function main(): Promise<void> {
       def.status === "published" ? new Date(now.getTime() - publishedIndex * 60 * 60 * 1000) : undefined;
     if (def.status === "published") publishedIndex += 1;
 
+    const tagEmbeds = def.tags
+      .map((label) => tagBySlug.get(slugify(label)))
+      .filter((e): e is NonNullable<typeof e> => e != null);
+
     const post = await Post.create({
       author,
       title: def.title,
       slug: def.slug,
       excerpt: def.excerpt,
-      content: def.content,
-      tags: def.tags,
+      content: normalizeSeedArticleContent(def),
+      tags: tagEmbeds,
       status: def.status,
       readTimeMinutes: def.readTimeMinutes,
       publishedAt,

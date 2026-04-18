@@ -1,0 +1,105 @@
+/* TipTap / ProseMirror article surface (public blog). */
+.tiptap-article .ProseMirror {
+  outline: none;
+  min-height: 0;
+}
+
+.tiptap-article .ProseMirror p {
+  margin: 0.65em 0;
+}
+
+.tiptap-article .ProseMirror h1,
+.tiptap-article .ProseMirror h2,
+.tiptap-article .ProseMirror h3,
+.tiptap-article .ProseMirror h4 {
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 1rem 0 0.4rem;
+}
+
+.tiptap-article .ProseMirror h1 {
+  font-size: 1.75rem;
+}
+.tiptap-article .ProseMirror h2 {
+  font-size: 1.45rem;
+}
+.tiptap-article .ProseMirror h3 {
+  font-size: 1.2rem;
+}
+.tiptap-article .ProseMirror h4 {
+  font-size: 1.05rem;
+}
+
+.tiptap-article .ProseMirror ul,
+.tiptap-article .ProseMirror ol {
+  padding-left: 1.35rem;
+  margin: 0.65em 0;
+}
+
+.tiptap-article .ProseMirror blockquote {
+  border-left: 3px solid rgba(99, 102, 241, 0.45);
+  margin: 0.75em 0;
+  padding-left: 1rem;
+  color: rgba(55, 65, 81, 0.95);
+}
+
+.dark .tiptap-article .ProseMirror blockquote {
+  color: rgba(229, 231, 235, 0.9);
+}
+
+.tiptap-article .ProseMirror a {
+  color: #4f46e5;
+  text-decoration: underline;
+}
+
+.tiptap-article .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 0.75em 0;
+}
+
+.tiptap-article .ProseMirror code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875em;
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+}
+
+.dark .tiptap-article .ProseMirror code {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tiptap-article .ProseMirror pre {
+  margin: 0.85em 0;
+  padding: 0.9rem 1rem;
+  border-radius: 8px;
+  background: #0d1117;
+  color: #e6edf3;
+  overflow-x: auto;
+}
+
+.tiptap-article .ProseMirror pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8125rem;
+  color: inherit;
+}
+
+.tiptap-article .ProseMirror .hljs-comment {
+  color: #8b949e;
+}
+.tiptap-article .ProseMirror .hljs-keyword {
+  color: #ff7b72;
+}
+.tiptap-article .ProseMirror .hljs-string {
+  color: #a5d6ff;
+}
+.tiptap-article .ProseMirror .hljs-title,
+.tiptap-article .ProseMirror .hljs-function {
+  color: #d2a8ff;
+}
+.tiptap-article .ProseMirror .hljs-number {
+  color: #79c0ff;
+}

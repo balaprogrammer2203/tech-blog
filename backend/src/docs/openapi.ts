@@ -14,6 +14,7 @@ export const openApiDocument = {
     { name: "Health" },
     { name: "Auth" },
     { name: "Categories" },
+    { name: "Tags" },
     { name: "Posts" },
     { name: "Comments" },
     { name: "Likes" },
@@ -78,6 +79,19 @@ export const openApiDocument = {
           role: { type: "string", enum: ["user", "admin"] },
         },
       },
+      SelfProfilePatch: {
+        type: "object",
+        required: ["name"],
+        properties: { name: { type: "string", minLength: 1, maxLength: 80 } },
+      },
+      ChangePasswordBody: {
+        type: "object",
+        required: ["currentPassword", "newPassword"],
+        properties: {
+          currentPassword: { type: "string" },
+          newPassword: { type: "string", minLength: 8, maxLength: 72 },
+        },
+      },
       PostCreate: {
         type: "object",
         required: ["title", "excerpt", "content"],
@@ -85,7 +99,13 @@ export const openApiDocument = {
           title: { type: "string" },
           excerpt: { type: "string" },
           content: { type: "string" },
-          tags: { type: "array", items: { type: "string" }, maxItems: 5 },
+          tags: {
+            type: "array",
+            description:
+              "Up to five existing Tag document ids (24-character hex strings). The server stores each as tagId plus denormalized name and slug on the post.",
+            items: { type: "string", pattern: "^[a-fA-F0-9]{24}$" },
+            maxItems: 5,
+          },
           status: { type: "string", enum: ["draft", "published"] },
           categoryId: { type: "string", description: "Leaf category ObjectId; required when status is published" },
           coverImageUrl: { type: "string" },
@@ -128,6 +148,13 @@ export const openApiDocument = {
         required: ["status"],
         properties: {
           status: { type: "string", enum: ["pending", "resolved", "dismissed"] },
+        },
+      },
+      ReportExportIds: {
+        type: "object",
+        required: ["ids"],
+        properties: {
+          ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 500 },
         },
       },
     },
@@ -203,6 +230,34 @@ export const openApiDocument = {
             description: "JSON body includes user object or user: null",
             content: { "application/json": { schema: { type: "object" } } },
           },
+        },
+      },
+      patch: {
+        tags: ["Auth"],
+        summary: "Update current user profile (name)",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/SelfProfilePatch" } } },
+        },
+        responses: {
+          "200": { description: "Updated user", content: { "application/json": { schema: { type: "object" } } } },
+          "401": { description: "Unauthorized" },
+        },
+      },
+    },
+    "/api/auth/change-password": {
+      post: {
+        tags: ["Auth"],
+        summary: "Change password for the authenticated user",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/ChangePasswordBody" } } },
+        },
+        responses: {
+          "204": { description: "Password updated" },
+          "401": { description: "Wrong current password or unauthorized" },
         },
       },
     },
@@ -372,6 +427,28 @@ export const openApiDocument = {
         responses: { "201": { description: "Created" } },
       },
     },
+    "/api/reports/admin/export": {
+      get: {
+        tags: ["Reports", "Admin"],
+        summary: "Export reports CSV (current filters)",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "q", in: "query", schema: { type: "string" } },
+          { name: "status", in: "query", schema: { type: "string", enum: ["pending", "resolved", "dismissed"] } },
+        ],
+        responses: { "200": { description: "CSV file" }, "403": { description: "Forbidden" } },
+      },
+      post: {
+        tags: ["Reports", "Admin"],
+        summary: "Export selected reports as CSV",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/ReportExportIds" } } },
+        },
+        responses: { "200": { description: "CSV file" }, "403": { description: "Forbidden" } },
+      },
+    },
     "/api/reports/admin": {
       get: {
         tags: ["Reports", "Admin"],
@@ -381,11 +458,25 @@ export const openApiDocument = {
           { name: "page", in: "query", schema: { type: "integer" } },
           { name: "limit", in: "query", schema: { type: "integer" } },
           { name: "status", in: "query", schema: { type: "string" } },
+          { name: "q", in: "query", schema: { type: "string" } },
+          {
+            name: "sortField",
+            in: "query",
+            schema: { type: "string", enum: ["status", "targetType", "targetId", "reason", "createdAt", "updatedAt"] },
+          },
+          { name: "sortOrder", in: "query", schema: { type: "string", enum: ["asc", "desc"] } },
         ],
         responses: { "200": { description: "OK" }, "403": { description: "Forbidden" } },
       },
     },
     "/api/reports/admin/{id}": {
+      get: {
+        tags: ["Reports", "Admin"],
+        summary: "Get report (admin)",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { "200": { description: "OK" }, "404": { description: "Not found" } },
+      },
       patch: {
         tags: ["Reports", "Admin"],
         summary: "Update report status",
@@ -396,6 +487,13 @@ export const openApiDocument = {
           content: { "application/json": { schema: { $ref: "#/components/schemas/ReportStatusPatch" } } },
         },
         responses: { "200": { description: "OK" } },
+      },
+      delete: {
+        tags: ["Reports", "Admin"],
+        summary: "Delete report",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { "204": { description: "Deleted" }, "404": { description: "Not found" } },
       },
     },
     "/api/admin/users": {

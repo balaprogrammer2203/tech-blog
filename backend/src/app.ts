@@ -1,4 +1,5 @@
 import express from "express";
+import compression from "compression";
 import helmet from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -17,7 +18,9 @@ import { createAdminUsersRouter } from "./routes/adminUsers.js";
 import { createUploadRouter } from "./routes/upload.js";
 import { createCategoriesRouter } from "./routes/categories.js";
 import { createAdminCategoriesRouter } from "./routes/adminCategories.js";
+import { createAdminTagsRouter } from "./routes/adminTags.js";
 import { createAdminDashboardRouter } from "./routes/adminDashboard.js";
+import { createTagsRouter } from "./routes/tags.js";
 
 export function createApp(env: Env) {
   const app = express();
@@ -40,8 +43,9 @@ export function createApp(env: Env) {
   );
   app.get("/openapi.json", (_req, res) => res.json(openApiDocument));
 
+  app.use(compression({ threshold: 1024 }));
   app.use(helmet());
-  app.use(express.json({ limit: "512kb" }));
+  app.use(express.json({ limit: "2mb" }));
   app.use(cookieParser());
 
   app.use(
@@ -63,6 +67,7 @@ export function createApp(env: Env) {
 
   app.use("/api/auth", createAuthRouter(env));
   app.use("/api/categories", createCategoriesRouter(env));
+  app.use("/api/tags", createTagsRouter(env));
   app.use("/api/posts", createPostsRouter(env));
   app.use("/api/posts/:postId/comments", createCommentsRouter(env));
   app.use("/api/posts/:postId/likes", createLikesRouter(env));
@@ -70,6 +75,7 @@ export function createApp(env: Env) {
   app.use("/api/reports", createReportsRouter(env));
   app.use("/api/admin/users", createAdminUsersRouter(env));
   app.use("/api/admin/categories", createAdminCategoriesRouter(env));
+  app.use("/api/admin/tags", createAdminTagsRouter(env));
   app.use("/api/admin/dashboard", createAdminDashboardRouter(env));
   app.use("/api/upload", createUploadRouter(env));
 

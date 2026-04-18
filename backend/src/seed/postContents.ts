@@ -1,7 +1,13 @@
 /**
- * Long-form markdown bodies for seeded posts (each article is 500+ words).
+ * Long-form markdown bodies for seeded posts (each article is 500+ words),
+ * or pre-built TipTap JSON (`{ type: "doc", … }`) for editor/highlight tests.
  * Used by src/seed.ts — keep slugs unique and excerpts ≤ 320 chars.
  */
+
+import {
+  SEED_REACT_TIPTAP_COMPONENT_STYLES,
+  SEED_REACT_TIPTAP_HOOKS_SNIPPETS,
+} from "./tiptapSeedDocs.js";
 
 export type SeedArticleCategorySlug =
   | "react-js"
@@ -17,7 +23,8 @@ export type SeedArticleDef = {
   title: string;
   slug: string;
   excerpt: string;
-  content: string;
+  /** Markdown string (converted to TipTap) or ready-made TipTap JSON document. */
+  content: string | Record<string, unknown>;
   tags: string[];
   categorySlug: SeedArticleCategorySlug;
   readTimeMinutes: number;
@@ -508,5 +515,27 @@ export const SEED_ARTICLES: SeedArticleDef[] = [
       "",
       "Thank you for testing the draft pipeline responsibly.",
     ].join("\n"),
+  },
+  {
+    title: "Seed: React hooks lab — JavaScript, HTML, and CSS code blocks",
+    slug: "react-seed-hooks-lab-code-blocks-js-html-css",
+    excerpt:
+      "Dummy TipTap article under React.js with three highlighted code blocks (JavaScript, HTML, CSS) for admin and public rendering checks.",
+    categorySlug: "react-js",
+    readTimeMinutes: 4,
+    status: "published",
+    tags: ["react", "seed", "tiptap"],
+    content: structuredClone(SEED_REACT_TIPTAP_HOOKS_SNIPPETS) as Record<string, unknown>,
+  },
+  {
+    title: "Seed: React UI snippets — more JS, HTML, and CSS blocks",
+    slug: "react-seed-ui-snippets-js-html-css-blocks",
+    excerpt:
+      "Second React.js seed post with different JavaScript, HTML, and CSS samples to verify lowlight languages and lazy-loaded article rendering on the frontend.",
+    categorySlug: "react-js",
+    readTimeMinutes: 3,
+    status: "published",
+    tags: ["react", "seed", "css"],
+    content: structuredClone(SEED_REACT_TIPTAP_COMPONENT_STYLES) as Record<string, unknown>,
   },
 ];

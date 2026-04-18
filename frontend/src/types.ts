@@ -7,12 +7,14 @@ export type User = {
   role: UserRole;
 };
 
+export type PostTag = { id: string; name: string; slug: string };
+
 export type PostListItem = {
   id: string;
   title: string;
   slug: string;
   excerpt: string;
-  tags: string[];
+  tags: PostTag[];
   coverImageUrl?: string;
   readTimeMinutes?: number;
   publishedAt?: string;
@@ -22,7 +24,8 @@ export type PostListItem = {
 };
 
 export type PostDetail = PostListItem & {
-  content: string;
+  /** TipTap JSON document or legacy markdown string. */
+  content: string | Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
   status?: string;

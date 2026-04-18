@@ -3,6 +3,8 @@ import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolk
 import { clearAuth, setAccessToken } from "./authSlice";
 import type { User } from "./authSlice";
 import type { AdminCategoryDetail, AdminCategoryRow, CategoriesTreeResponse, PostCategory } from "@/types/categories";
+import type { AdminTagDetail, AdminTagRow, PostTag } from "@/types/tags";
+import type { AdminReportDetail, AdminReportRow } from "@/types/reports";
 
 type AuthSliceState = { auth: { accessToken: string | null } };
 
@@ -49,11 +51,13 @@ export type AdminPostListRow = {
   commentCount: number;
   author: { id: string; email: string; name: string } | null;
   category: PostCategory;
+  tags: PostTag[];
 };
 
 export type AdminPostDetail = AdminPostListRow & {
-  content: string;
-  tags: string[];
+  /** TipTap JSON (`{ type: \"doc\" }`) or legacy markdown string. */
+  content: unknown;
+  tags: PostTag[];
   coverImageUrl?: string;
   readTimeMinutes?: number;
 };
@@ -94,10 +98,11 @@ export type AdminDashboardResponse = {
 export const baseApi = createApi({
   reducerPath: "api",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["AdminPosts", "AdminUsers", "AdminReports", "Categories", "AdminCategories", "AdminDashboard"],
+  tagTypes: ["AdminPosts", "AdminUsers", "AdminReports", "Categories", "AdminCategories", "AdminTags", "PublicTags", "AdminDashboard", "AuthMe"],
   endpoints: (build) => ({
     getMe: build.query<{ user: User | null }, void>({
       query: () => "/api/auth/me",
+      providesTags: ["AuthMe"],
     }),
     adminDashboard: build.query<AdminDashboardResponse, void>({
       query: () => "/api/admin/dashboard",
@@ -117,6 +122,13 @@ export const baseApi = createApi({
           dispatch(clearAuth());
         }
       },
+    }),
+    updateMe: build.mutation<{ user: User }, { name: string }>({
+      query: (body) => ({ url: "/api/auth/me", method: "PATCH", body }),
+      invalidatesTags: ["AuthMe"],
+    }),
+    changePassword: build.mutation<void, { currentPassword: string; newPassword: string }>({
+      query: (body) => ({ url: "/api/auth/change-password", method: "POST", body }),
     }),
     categoriesTree: build.query<CategoriesTreeResponse, void>({
       query: () => "/api/categories",
@@ -179,6 +191,57 @@ export const baseApi = createApi({
       query: (id) => ({ url: `/api/admin/categories/${id}`, method: "DELETE" }),
       invalidatesTags: ["AdminCategories", "Categories", "AdminDashboard"],
     }),
+    publicTags: build.query<{ items: PostTag[] }, void>({
+      query: () => "/api/tags",
+      providesTags: ["PublicTags"],
+    }),
+    adminTagList: build.query<
+      Paginated<AdminTagRow>,
+      {
+        page: number;
+        limit: number;
+        q?: string;
+        sortField: "name" | "slug" | "sortOrder" | "createdAt" | "postCount";
+        sortOrder: "asc" | "desc";
+      }
+    >({
+      query: ({ page, limit, q, sortField, sortOrder }) => ({
+        url: "/api/admin/tags",
+        params: {
+          page,
+          limit,
+          sortField,
+          sortOrder,
+          ...(q ? { q } : {}),
+        },
+      }),
+      providesTags: ["AdminTags"],
+    }),
+    adminTagDetail: build.query<AdminTagDetail, string>({
+      query: (id) => `/api/admin/tags/${id}`,
+      providesTags: (_r, _e, id) => [{ type: "AdminTags", id }],
+    }),
+    createAdminTag: build.mutation<
+      { id: string; slug: string },
+      { name: string; slug?: string; description?: string; sortOrder?: number }
+    >({
+      query: (body) => ({ url: "/api/admin/tags", method: "POST", body }),
+      invalidatesTags: ["AdminTags", "PublicTags", "AdminDashboard"],
+    }),
+    updateAdminTag: build.mutation<
+      { id: string; slug: string },
+      {
+        id: string;
+        body: Partial<{ name: string; slug: string; description: string; sortOrder: number }>;
+      }
+    >({
+      query: ({ id, body }) => ({ url: `/api/admin/tags/${id}`, method: "PATCH", body }),
+      invalidatesTags: (_r, _e, { id }) => ["AdminTags", "PublicTags", "AdminDashboard", "AdminPosts", { type: "AdminTags", id }],
+    }),
+    deleteAdminTag: build.mutation<void, string>({
+      query: (id) => ({ url: `/api/admin/tags/${id}`, method: "DELETE" }),
+      invalidatesTags: ["AdminTags", "PublicTags", "AdminDashboard"],
+    }),
     adminPosts: build.query<
       Paginated<AdminPostListRow>,
       {
@@ -187,11 +250,12 @@ export const baseApi = createApi({
         q?: string;
         status?: "draft" | "published";
         categorySlug?: string;
+        tagSlug?: string;
         sortField: "title" | "slug" | "status" | "updatedAt" | "publishedAt" | "createdAt" | "likeCount" | "commentCount";
         sortOrder: "asc" | "desc";
       }
     >({
-      query: ({ page, limit, q, status, categorySlug, sortField, sortOrder }) => ({
+      query: ({ page, limit, q, status, categorySlug, tagSlug, sortField, sortOrder }) => ({
         url: "/api/admin/users/posts",
         params: {
           page,
@@ -201,6 +265,7 @@ export const baseApi = createApi({
           ...(q ? { q } : {}),
           ...(status ? { status } : {}),
           ...(categorySlug ? { categorySlug } : {}),
+          ...(tagSlug ? { tagSlug } : {}),
         },
       }),
       providesTags: ["AdminPosts"],
@@ -214,7 +279,8 @@ export const baseApi = createApi({
       {
         title: string;
         excerpt: string;
-        content: string;
+        content: unknown;
+        /** Tag document ids (max 5). */
         tags?: string[];
         status?: "draft" | "published";
         categoryId?: string;
@@ -224,7 +290,7 @@ export const baseApi = createApi({
       }
     >({
       query: (body) => ({ url: "/api/admin/users/posts", method: "POST", body }),
-      invalidatesTags: ["AdminPosts", "AdminDashboard"],
+      invalidatesTags: ["AdminPosts", "AdminDashboard", "AdminTags", "PublicTags"],
     }),
     updateAdminPost: build.mutation<
       { id: string; slug: string },
@@ -233,7 +299,7 @@ export const baseApi = createApi({
         body: Partial<{
           title: string;
           excerpt: string;
-          content: string;
+          content: unknown;
           tags: string[];
           status: "draft" | "published";
           categoryId: string;
@@ -243,7 +309,7 @@ export const baseApi = createApi({
       }
     >({
       query: ({ id, body }) => ({ url: `/api/admin/users/posts/${id}`, method: "PATCH", body }),
-      invalidatesTags: (_r, _e, { id }) => ["AdminPosts", "AdminDashboard", { type: "AdminPosts", id }],
+      invalidatesTags: (_r, _e, { id }) => ["AdminPosts", "AdminDashboard", "AdminTags", "PublicTags", { type: "AdminPosts", id }],
     }),
     setPostStatus: build.mutation<void, { id: string; status: "draft" | "published" }>({
       query: ({ id, status }) => ({
@@ -305,22 +371,35 @@ export const baseApi = createApi({
       invalidatesTags: (_r, _e, id) => ["AdminUsers", "AdminPosts", "AdminDashboard", { type: "AdminUsers", id }],
     }),
     adminReports: build.query<
-      Paginated<{
-        id: string;
-        targetType: string;
-        targetId: string;
-        reason: string;
-        status: string;
-        createdAt: string;
-        reporter: { id: string; name: string; email: string } | null;
-      }>,
-      { page: number; status?: string }
+      Paginated<AdminReportRow>,
+      {
+        page: number;
+        limit: number;
+        q?: string;
+        status?: "pending" | "resolved" | "dismissed";
+        sortField: "status" | "targetType" | "targetId" | "reason" | "createdAt" | "updatedAt";
+        sortOrder: "asc" | "desc";
+      }
     >({
-      query: ({ page, status }) => ({
+      query: ({ page, limit, q, status, sortField, sortOrder }) => ({
         url: "/api/reports/admin",
-        params: { page, limit: 20, ...(status ? { status } : {}) },
+        params: {
+          page,
+          limit,
+          sortField,
+          sortOrder,
+          ...(q ? { q } : {}),
+          ...(status ? { status } : {}),
+        },
       }),
-      providesTags: ["AdminReports"],
+      providesTags: (res) =>
+        res?.items?.length
+          ? [...res.items.map((r) => ({ type: "AdminReports" as const, id: r.id })), "AdminReports"]
+          : ["AdminReports"],
+    }),
+    adminReportDetail: build.query<AdminReportDetail, string>({
+      query: (id) => `/api/reports/admin/${id}`,
+      providesTags: (_r, _e, id) => [{ type: "AdminReports", id }],
     }),
     setReportStatus: build.mutation<void, { id: string; status: "pending" | "resolved" | "dismissed" }>({
       query: ({ id, status }) => ({
@@ -328,7 +407,11 @@ export const baseApi = createApi({
         method: "PATCH",
         body: { status },
       }),
-      invalidatesTags: ["AdminReports", "AdminDashboard"],
+      invalidatesTags: (_r, _e, { id }) => ["AdminReports", "AdminDashboard", { type: "AdminReports", id }],
+    }),
+    deleteReport: build.mutation<void, string>({
+      query: (id) => ({ url: `/api/reports/admin/${id}`, method: "DELETE" }),
+      invalidatesTags: (_r, _e, id) => ["AdminReports", "AdminDashboard", { type: "AdminReports", id }],
     }),
   }),
 });
@@ -337,6 +420,8 @@ export const {
   useGetMeQuery,
   useLoginMutation,
   useLogoutMutation,
+  useUpdateMeMutation,
+  useChangePasswordMutation,
   useAdminDashboardQuery,
   useCategoriesTreeQuery,
   useAdminCategoryListQuery,
@@ -344,6 +429,12 @@ export const {
   useCreateAdminCategoryMutation,
   useUpdateAdminCategoryMutation,
   useDeleteAdminCategoryMutation,
+  usePublicTagsQuery,
+  useAdminTagListQuery,
+  useAdminTagDetailQuery,
+  useCreateAdminTagMutation,
+  useUpdateAdminTagMutation,
+  useDeleteAdminTagMutation,
   useAdminPostsQuery,
   useAdminPostDetailQuery,
   useCreateAdminPostMutation,
@@ -356,5 +447,7 @@ export const {
   useSetUserRoleMutation,
   useDeleteUserMutation,
   useAdminReportsQuery,
+  useAdminReportDetailQuery,
   useSetReportStatusMutation,
+  useDeleteReportMutation,
 } = baseApi;

@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { assertValidTiptapContent, tiptapDocumentHasMeaningfulContent } from "./tiptapDoc.js";
+
+const mongoObjectIdString = z.string().regex(/^[a-f0-9]{24}$/i, "Invalid id");
 
 export const registerSchema = z.object({
   email: z.string().email().max(254),
@@ -9,6 +12,15 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1).max(72),
+});
+
+export const selfUpdateProfileSchema = z.object({
+  name: z.string().min(1).max(80),
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(72),
+  newPassword: z.string().min(8).max(72),
 });
 
 export const paginationSchema = z.object({
@@ -22,11 +34,34 @@ export const adminListPaginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
 });
 
-export const postCreateSchema = z.object({
+export const adminReportListQuerySchema = adminListPaginationSchema.extend({
+  status: z.enum(["pending", "resolved", "dismissed"]).optional(),
+  q: z.string().optional(),
+  sortField: z
+    .enum(["status", "targetType", "targetId", "reason", "createdAt", "updatedAt"])
+    .default("createdAt"),
+  sortOrder: z.enum(["asc", "desc"]).default("desc"),
+});
+
+/** Markdown string (legacy) or TipTap `{ type: \"doc\", ... }` JSON (validated). */
+export const postContentFieldSchema = z.union([
+  z.string().min(1).max(150_000),
+  z.custom<unknown>((data) => {
+    try {
+      assertValidTiptapContent(data);
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Invalid TipTap document"),
+]);
+
+const postBodyFields = z.object({
   title: z.string().min(1).max(200),
   excerpt: z.string().min(1).max(320),
-  content: z.string().min(1).max(100_000),
-  tags: z.array(z.string().trim().min(1).max(40)).max(5).default([]),
+  content: postContentFieldSchema,
+  /** Up to five Tag document ids (24-char hex). */
+  tags: z.array(mongoObjectIdString).max(5).default([]),
   status: z.enum(["draft", "published"]).default("draft"),
   /** Leaf category (second level); required when status is published */
   categoryId: z.string().optional(),
@@ -34,7 +69,20 @@ export const postCreateSchema = z.object({
   readTimeMinutes: z.number().int().min(1).max(999).optional(),
 });
 
-export const postUpdateSchema = postCreateSchema.partial();
+function refinePostContentNonEmpty(data: { content?: unknown }, ctx: z.RefinementCtx): void {
+  if (data.content === undefined) return;
+  if (typeof data.content === "string") {
+    if (!data.content.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["content"], message: "Content cannot be empty" });
+    }
+  } else if (!tiptapDocumentHasMeaningfulContent(data.content)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["content"], message: "Content cannot be empty" });
+  }
+}
+
+export const postCreateSchema = postBodyFields.superRefine((data, ctx) => refinePostContentNonEmpty(data, ctx));
+
+export const postUpdateSchema = postBodyFields.partial().superRefine((data, ctx) => refinePostContentNonEmpty(data, ctx));
 
 export const commentCreateSchema = z.object({
   body: z.string().min(1).max(2000),
@@ -84,12 +132,15 @@ export const adminCategoryExportByIdsSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(500),
 });
 
+export const adminReportExportByIdsSchema = adminCategoryExportByIdsSchema;
+
 export const adminPostListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(25),
   q: z.string().optional(),
   status: z.enum(["draft", "published"]).optional(),
   categorySlug: z.string().optional(),
+  tagSlug: z.string().optional(),
   sortField: z
     .enum(["title", "slug", "status", "updatedAt", "publishedAt", "createdAt", "likeCount", "commentCount"])
     .default("updatedAt"),
@@ -109,6 +160,27 @@ export const adminPostExportByIdsSchema = adminCategoryExportByIdsSchema;
 export const adminUserExportByIdsSchema = adminCategoryExportByIdsSchema;
 
 /** Admin creates a post; optional authorId assigns another user as author. */
-export const adminPostCreateSchema = postCreateSchema.extend({
-  authorId: z.string().optional(),
+export const adminPostCreateSchema = postBodyFields
+  .extend({
+    authorId: z.string().optional(),
+  })
+  .superRefine((data, ctx) => refinePostContentNonEmpty(data, ctx));
+
+export const adminTagListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  q: z.string().optional(),
+  sortField: z.enum(["name", "slug", "sortOrder", "createdAt", "postCount"]).default("sortOrder"),
+  sortOrder: z.enum(["asc", "desc"]).default("asc"),
 });
+
+export const adminTagCreateSchema = z.object({
+  name: z.string().min(1).max(80),
+  slug: z.string().min(1).max(96).optional(),
+  description: z.string().max(300).optional(),
+  sortOrder: z.coerce.number().int().optional(),
+});
+
+export const adminTagUpdateSchema = adminTagCreateSchema.partial();
+
+export const adminTagExportByIdsSchema = adminCategoryExportByIdsSchema;

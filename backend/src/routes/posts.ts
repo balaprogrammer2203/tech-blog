@@ -13,6 +13,7 @@ import type { RequestHandler } from "express";
 import { paginationSchema, postCreateSchema, postUpdateSchema } from "../validators/schemas.js";
 import { delCachePrefix, getCache, setCache } from "../lib/ttlCache.js";
 import { formatPostCategory, requireLeafCategoryId, resolveCategoryFilter } from "../utils/category.js";
+import { formatPostTags, resolvePostTagEmbeddings, resolveTagSlugFilter } from "../utils/tag.js";
 
 const authorSelect = "name";
 
@@ -51,6 +52,10 @@ export function createPostsRouter(env: Env) {
         categorySlug: typeof req.query.categorySlug === "string" ? req.query.categorySlug : undefined,
       });
       if (catId) filter.category = catId;
+      const tagId = await resolveTagSlugFilter(
+        typeof req.query.tagSlug === "string" ? req.query.tagSlug : undefined
+      );
+      if (tagId) filter["tags.tagId"] = tagId;
 
       const skip = (page - 1) * limit;
       const baseSelect =
@@ -88,7 +93,7 @@ export function createPostsRouter(env: Env) {
           title: p.title,
           slug: p.slug,
           excerpt: p.excerpt,
-          tags: p.tags,
+          tags: formatPostTags(p.tags),
           coverImageUrl: p.coverImageUrl,
           readTimeMinutes: p.readTimeMinutes,
           publishedAt: p.publishedAt,
@@ -128,7 +133,7 @@ export function createPostsRouter(env: Env) {
           title: p.title,
           slug: p.slug,
           excerpt: p.excerpt,
-          tags: p.tags,
+          tags: formatPostTags(p.tags),
           status: p.status,
           coverImageUrl: p.coverImageUrl,
           readTimeMinutes: p.readTimeMinutes,
@@ -168,7 +173,7 @@ export function createPostsRouter(env: Env) {
         slug: post.slug,
         excerpt: post.excerpt,
         content: post.content,
-        tags: post.tags,
+        tags: formatPostTags(post.tags),
         coverImageUrl: post.coverImageUrl,
         readTimeMinutes: post.readTimeMinutes,
         publishedAt: post.publishedAt,
@@ -206,7 +211,7 @@ export function createPostsRouter(env: Env) {
       slug: post.slug,
       excerpt: post.excerpt,
       content: post.content,
-      tags: post.tags,
+      tags: formatPostTags(post.tags),
       coverImageUrl: post.coverImageUrl,
       readTimeMinutes: post.readTimeMinutes,
       publishedAt: post.publishedAt,
@@ -237,13 +242,14 @@ export function createPostsRouter(env: Env) {
       const base = slugify(body.title);
       const slug = await uniqueSlug(base);
       const publishedAt = body.status === "published" ? new Date() : undefined;
+      const tagEmbeds = await resolvePostTagEmbeddings(body.tags);
       const post = await Post.create({
         author: req.user!.id,
         title: body.title,
         slug,
         excerpt: body.excerpt,
         content: body.content,
-        tags: body.tags,
+        tags: tagEmbeds,
         status: body.status,
         coverImageUrl: body.coverImageUrl,
         readTimeMinutes: body.readTimeMinutes,
@@ -266,7 +272,7 @@ export function createPostsRouter(env: Env) {
       if (body.title !== undefined) post.title = body.title;
       if (body.excerpt !== undefined) post.excerpt = body.excerpt;
       if (body.content !== undefined) post.content = body.content;
-      if (body.tags !== undefined) post.tags = body.tags;
+      if (body.tags !== undefined) post.set("tags", await resolvePostTagEmbeddings(body.tags));
       if (body.coverImageUrl !== undefined) post.coverImageUrl = body.coverImageUrl;
       if (body.readTimeMinutes !== undefined) post.readTimeMinutes = body.readTimeMinutes;
       if (body.categoryId !== undefined) {

@@ -21,6 +21,7 @@ import {
   postUpdateSchema,
 } from "../validators/schemas.js";
 import { formatPostCategory, requireLeafCategoryId, resolveCategoryFilter } from "../utils/category.js";
+import { formatPostTags, resolvePostTagEmbeddings, resolveTagSlugFilter } from "../utils/tag.js";
 import { slugify } from "../utils/slug.js";
 import { delCachePrefix } from "../lib/ttlCache.js";
 
@@ -162,7 +163,7 @@ export function createAdminUsersRouter(env: Env) {
     ...admin,
     asyncHandler(async (req, res) => {
       const raw = adminPostListQuerySchema.partial().parse(req.query);
-      const match = await buildPostListMatch(raw.q, raw.status, raw.categorySlug);
+      const match = await buildPostListMatch(raw.q, raw.status, raw.categorySlug, raw.tagSlug);
       await sendPostsCsv(res, "posts.csv", match, 5000);
     })
   );
@@ -184,7 +185,7 @@ export function createAdminUsersRouter(env: Env) {
     asyncHandler(async (req, res) => {
       const query = adminPostListQuerySchema.parse(req.query);
       const skip = (query.page - 1) * query.limit;
-      const match = await buildPostListMatch(query.q, query.status, query.categorySlug);
+      const match = await buildPostListMatch(query.q, query.status, query.categorySlug, query.tagSlug);
       const sortDir = query.sortOrder === "desc" ? -1 : 1;
       const sortObj: Record<string, 1 | -1> = { [query.sortField]: sortDir };
       if (query.sortField !== "title") sortObj.title = 1;
@@ -194,7 +195,7 @@ export function createAdminUsersRouter(env: Env) {
           .sort(sortObj)
           .skip(skip)
           .limit(query.limit)
-          .select("title slug excerpt status author publishedAt updatedAt likeCount commentCount category createdAt")
+          .select("title slug excerpt status author publishedAt updatedAt likeCount commentCount category tags createdAt")
           .populate("author", "email name")
           .populate(categoryPopulate)
           .lean(),
@@ -221,6 +222,7 @@ export function createAdminUsersRouter(env: Env) {
                 }
               : null,
           category: formatPostCategory(p.category),
+          tags: formatPostTags(p.tags),
         })),
         page: query.page,
         limit: query.limit,
@@ -248,13 +250,14 @@ export function createAdminUsersRouter(env: Env) {
       }
       const slug = await uniquePostSlug(body.title);
       const publishedAt = body.status === "published" ? new Date() : undefined;
+      const tagEmbeds = await resolvePostTagEmbeddings(body.tags);
       const post = await Post.create({
         author: authorId,
         title: body.title,
         slug,
         excerpt: body.excerpt,
         content: body.content,
-        tags: body.tags,
+        tags: tagEmbeds,
         status: body.status,
         coverImageUrl: body.coverImageUrl,
         readTimeMinutes: body.readTimeMinutes,
@@ -283,7 +286,7 @@ export function createAdminUsersRouter(env: Env) {
         slug: post.slug,
         excerpt: post.excerpt,
         content: post.content,
-        tags: post.tags,
+        tags: formatPostTags(post.tags),
         status: post.status,
         coverImageUrl: post.coverImageUrl,
         readTimeMinutes: post.readTimeMinutes,
@@ -318,7 +321,7 @@ export function createAdminUsersRouter(env: Env) {
       if (body.title !== undefined) post.title = body.title;
       if (body.excerpt !== undefined) post.excerpt = body.excerpt;
       if (body.content !== undefined) post.content = body.content;
-      if (body.tags !== undefined) post.tags = body.tags;
+      if (body.tags !== undefined) post.set("tags", await resolvePostTagEmbeddings(body.tags));
       if (body.coverImageUrl !== undefined) post.coverImageUrl = body.coverImageUrl;
       if (body.readTimeMinutes !== undefined) post.readTimeMinutes = body.readTimeMinutes;
       if (body.categoryId !== undefined) {
@@ -508,7 +511,8 @@ export function createAdminUsersRouter(env: Env) {
 async function buildPostListMatch(
   q: string | undefined,
   status: string | undefined,
-  categorySlug: string | undefined
+  categorySlug: string | undefined,
+  tagSlug: string | undefined
 ): Promise<Record<string, unknown>> {
   const filter: Record<string, unknown> = {};
   if (status === "draft" || status === "published") filter.status = status;
@@ -517,6 +521,8 @@ async function buildPostListMatch(
     categorySlug: typeof categorySlug === "string" ? categorySlug : undefined,
   });
   if (catId) filter.category = catId;
+  const tagId = await resolveTagSlugFilter(typeof tagSlug === "string" ? tagSlug : undefined);
+  if (tagId) filter["tags.tagId"] = tagId;
   const trimmed = q?.trim();
   if (trimmed) {
     const re = new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");

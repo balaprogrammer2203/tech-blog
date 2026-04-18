@@ -1,7 +1,7 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { clearAuth, setAccessToken } from "./authSlice";
-import type { Paginated, PostDetail, PostListItem, User } from "@/types";
+import type { Paginated, PostDetail, PostListItem, PostTag, User } from "@/types";
 
 type AuthSliceState = { auth: { accessToken: string | null } };
 
@@ -36,11 +36,15 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 export const baseApi = createApi({
   reducerPath: "api",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["Post", "PostDetail", "Comments", "Likes", "Bookmarks", "Me"],
+  tagTypes: ["Post", "PostDetail", "Comments", "Likes", "Bookmarks", "Me", "PublicTags"],
   endpoints: (build) => ({
     getMe: build.query<{ user: User | null }, void>({
       query: () => "/api/auth/me",
       providesTags: ["Me"],
+    }),
+    publicTags: build.query<{ items: PostTag[] }, void>({
+      query: () => "/api/tags",
+      providesTags: ["PublicTags"],
     }),
     login: build.mutation<{ accessToken: string; user: User }, { email: string; password: string }>({
       query: (body) => ({ url: "/api/auth/login", method: "POST", body }),
@@ -171,6 +175,7 @@ export const baseApi = createApi({
 
 export const {
   useGetMeQuery,
+  usePublicTagsQuery,
   useLoginMutation,
   useRegisterMutation,
   useLogoutMutation,
