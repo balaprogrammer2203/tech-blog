@@ -31,13 +31,13 @@ import {
   type GridRowSelectionModel,
   type GridSortModel,
 } from "@mui/x-data-grid";
-import { useAdminCategoryListQuery, useCategoriesTreeQuery } from "@/store/baseApi";
+import { useAdminUsersQuery } from "@/store/baseApi";
+import type { AdminUserListRow } from "@/store/baseApi";
 import type { RootState } from "@/store/store";
-import type { AdminCategoryRow } from "@/types/categories";
-import { apiErrorMessage } from "./categories/apiErrorMessage";
-import { BulkDeleteCategoriesDialog } from "./categories/BulkDeleteCategoriesDialog";
-import { DeleteCategoryDialog } from "./categories/DeleteCategoryDialog";
-import { downloadCategoriesExport } from "./categories/categoryCsvExport";
+import { apiErrorMessage } from "../categories/apiErrorMessage";
+import { BulkDeleteUsersDialog } from "./BulkDeleteUsersDialog";
+import { DeleteUserDialog } from "./DeleteUserDialog";
+import { downloadUsersExport } from "./userCsvExport";
 import { adminLayout, dataGridAdminSx } from "@/theme/adminTheme";
 
 const actionIconSx = {
@@ -52,21 +52,19 @@ function listErrorMessage(e: unknown, fallback: string): string {
   return apiErrorMessage(e as FetchBaseQueryError, fallback);
 }
 
-type LevelFilter = "all" | "root" | "child";
+const defaultSort: GridSortModel = [{ field: "createdAt", sort: "desc" }];
 
-const defaultSort: GridSortModel = [{ field: "sortOrder", sort: "asc" }];
-
-export function CategoriesAdminPage() {
+export function UsersAdminPage() {
   const navigate = useNavigate();
+  const me = useSelector((s: RootState) => s.auth.user);
   const apiBase = import.meta.env.VITE_API_URL as string;
   const token = useSelector((s: RootState) => s.auth.accessToken);
 
-  const knownRowsRef = useRef(new Map<string, AdminCategoryRow>());
+  const knownRowsRef = useRef(new Map<string, AdminUserListRow>());
 
   const [searchInput, setSearchInput] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
-  const [level, setLevel] = useState<LevelFilter>("all");
-  const [parentId, setParentId] = useState("");
+  const [role, setRole] = useState<"" | "admin" | "user">("");
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ page: 0, pageSize: 25 });
   const [sortModel, setSortModel] = useState<GridSortModel>(defaultSort);
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
@@ -84,39 +82,33 @@ export function CategoriesAdminPage() {
 
   useEffect(() => {
     setPaginationModel((p) => ({ ...p, page: 0 }));
-  }, [debouncedQ, level, parentId]);
-
-  useEffect(() => {
-    if (level !== "child") setParentId("");
-  }, [level]);
+  }, [debouncedQ, role]);
 
   useEffect(() => {
     setRowSelectionModel([]);
     knownRowsRef.current = new Map();
-  }, [debouncedQ, level, parentId]);
+  }, [debouncedQ, role]);
 
   const rawField = sortModel[0]?.field;
-  const allowedSort: "name" | "slug" | "sortOrder" | "createdAt" | "postCount" =
-    rawField && ["name", "slug", "sortOrder", "createdAt", "postCount"].includes(String(rawField))
-      ? (String(rawField) as "name" | "slug" | "sortOrder" | "createdAt" | "postCount")
-      : "sortOrder";
-  const sortOrderDir: "asc" | "desc" = sortModel[0]?.sort === "desc" ? "desc" : "asc";
+  const allowedSort: "email" | "name" | "role" | "createdAt" =
+    rawField && ["email", "name", "role", "createdAt"].includes(String(rawField))
+      ? (String(rawField) as "email" | "name" | "role" | "createdAt")
+      : "createdAt";
+  const sortOrderDir: "asc" | "desc" = sortModel[0]?.sort === "asc" ? "asc" : "desc";
 
   const listArgs = useMemo(
     () => ({
       page: paginationModel.page + 1,
       limit: paginationModel.pageSize,
       q: debouncedQ || undefined,
-      level: level === "all" ? undefined : level,
-      parentId: level === "child" && parentId ? parentId : undefined,
+      role: role || undefined,
       sortField: allowedSort,
       sortOrder: sortOrderDir,
     }),
-    [paginationModel, debouncedQ, level, parentId, allowedSort, sortOrderDir]
+    [paginationModel, debouncedQ, role, allowedSort, sortOrderDir]
   );
 
-  const { data, isFetching, isError, error, refetch } = useAdminCategoryListQuery(listArgs);
-  const { data: tree } = useCategoriesTreeQuery();
+  const { data, isFetching, isError, error, refetch } = useAdminUsersQuery(listArgs);
 
   useEffect(() => {
     for (const r of data?.items ?? []) {
@@ -125,11 +117,9 @@ export function CategoriesAdminPage() {
   }, [data?.items]);
 
   useEffect(() => {
-    if (isError) setListError(listErrorMessage(error, "Failed to load categories."));
+    if (isError) setListError(listErrorMessage(error, "Failed to load users."));
     else setListError(null);
   }, [isError, error]);
-
-  const roots = tree?.roots ?? [];
 
   const selectedIds = useMemo(() => [...rowSelectionModel].map((id) => String(id)), [rowSelectionModel]);
 
@@ -137,152 +127,113 @@ export function CategoriesAdminPage() {
     setExportError(null);
     try {
       if (selectedIds.length > 0) {
-        await downloadCategoriesExport(apiBase, token, { scope: "selected", ids: [...selectedIds] });
+        await downloadUsersExport(apiBase, token, { scope: "selected", ids: [...selectedIds] });
       } else {
-        await downloadCategoriesExport(apiBase, token, {
-          scope: "filter",
-          q: debouncedQ || undefined,
-          level,
-          parentId: level === "child" && parentId ? parentId : undefined,
-        });
+        await downloadUsersExport(apiBase, token, { scope: "filter", q: debouncedQ || undefined, role: role || undefined });
       }
     } catch (e) {
       setExportError(e instanceof Error ? e.message : "Export failed.");
     }
-  }, [apiBase, token, debouncedQ, level, parentId, selectedIds]);
+  }, [apiBase, token, debouncedQ, role, selectedIds]);
 
-  const columns: GridColDef<AdminCategoryRow>[] = useMemo(
+  const columns: GridColDef<AdminUserListRow>[] = useMemo(
     () => [
+      {
+        field: "email",
+        headerName: "Email",
+        flex: 1,
+        minWidth: 200,
+        renderCell: (p) => (
+          <Typography variant="body2" sx={{ fontWeight: 700, color: adminLayout.textPrimary }} noWrap title={p.row.email}>
+            {p.row.email}
+          </Typography>
+        ),
+      },
       {
         field: "name",
         headerName: "Name",
-        flex: 1,
-        minWidth: 180,
+        flex: 0.8,
+        minWidth: 120,
         renderCell: (p) => (
-          <Box sx={{ py: 0.5, minWidth: 0 }}>
-            <Typography variant="body2" sx={{ fontWeight: 700, color: adminLayout.textPrimary, lineHeight: 1.25 }} noWrap title={p.row.name}>
-              {p.row.name}
-            </Typography>
-            <Typography variant="caption" sx={{ color: adminLayout.textMuted, display: "block", lineHeight: 1.2 }} noWrap title={p.row.slug}>
-              {p.row.slug}
-            </Typography>
-          </Box>
+          <Typography variant="body2" color="text.secondary" noWrap title={p.row.name}>
+            {p.row.name}
+          </Typography>
         ),
       },
       {
-        field: "level",
-        headerName: "Level",
+        field: "role",
+        headerName: "Role",
         width: 100,
-        sortable: false,
         align: "center",
         headerAlign: "center",
-        renderCell: (p) => {
-          const root = p.row.level === 0;
-          return (
-            <Chip
-              size="small"
-              label={root ? "Root" : "Sub"}
-              color={root ? "success" : "secondary"}
-              variant="filled"
-              sx={{ fontWeight: 700, minWidth: 72 }}
-            />
-          );
-        },
-      },
-      {
-        field: "parentName",
-        headerName: "Parent",
-        flex: 0.7,
-        minWidth: 120,
-        sortable: false,
-        valueGetter: (_v, row) => row.parentName ?? "—",
-        renderCell: (p) => {
-          const label = p.row.parentName ?? "—";
-          return (
-            <Typography variant="body2" color="text.secondary" noWrap title={label}>
-              {label}
-            </Typography>
-          );
-        },
-      },
-      {
-        field: "postCount",
-        headerName: "Posts",
-        type: "number",
-        width: 88,
         renderCell: (p) => (
-          <Typography variant="body2" sx={{ fontWeight: 600, color: adminLayout.textPrimary }}>
-            {p.value}
-          </Typography>
-        ),
-      },
-      {
-        field: "sortOrder",
-        headerName: "Order",
-        type: "number",
-        width: 80,
-        renderCell: (p) => (
-          <Typography variant="body2" color="text.secondary">
-            {p.value}
-          </Typography>
+          <Chip
+            size="small"
+            label={p.row.role}
+            color={p.row.role === "admin" ? "error" : "success"}
+            variant="filled"
+            sx={{ fontWeight: 700, textTransform: "capitalize", minWidth: 72 }}
+          />
         ),
       },
       {
         field: "createdAt",
-        headerName: "Created",
+        headerName: "Joined",
         minWidth: 120,
         valueFormatter: (v) => (v ? new Date(String(v)).toLocaleDateString() : ""),
       },
       {
         field: "actions",
         headerName: "Actions",
-        width: 132,
+        width: 108,
         sortable: false,
         filterable: false,
         disableColumnMenu: true,
         renderCell: (params) => (
           <Stack direction="row" spacing={0.75} onClick={(e) => e.stopPropagation()} sx={{ py: 0.25 }}>
             <Tooltip title="View">
-              <IconButton size="small" aria-label="View" onClick={() => navigate(`/categories/${params.row.id}`)} sx={actionIconSx}>
+              <IconButton size="small" aria-label="View" onClick={() => navigate(`/users/${params.row.id}`)} sx={actionIconSx}>
                 <VisibilityIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Edit">
-              <IconButton size="small" aria-label="Edit" onClick={() => navigate(`/categories/${params.row.id}/edit`)} sx={actionIconSx}>
+            <Tooltip title="Edit role">
+              <IconButton size="small" aria-label="Edit" onClick={() => navigate(`/users/${params.row.id}/edit`)} sx={actionIconSx}>
                 <EditIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Delete">
-              <IconButton
-                size="small"
-                aria-label="Delete"
-                color="error"
-                onClick={() => setDeleteId(params.row.id)}
-                sx={{
-                  ...actionIconSx,
-                  borderColor: "rgba(239, 68, 68, 0.35)",
-                  "&:hover": { bgcolor: "rgba(239, 68, 68, 0.06)" },
-                }}
-              >
-                <DeleteOutlineIcon sx={{ fontSize: 18 }} />
-              </IconButton>
+            <Tooltip title={params.row.id === me?.id ? "Cannot delete yourself" : "Delete"}>
+              <span>
+                <IconButton
+                  size="small"
+                  aria-label="Delete"
+                  color="error"
+                  disabled={params.row.id === me?.id}
+                  onClick={() => setDeleteId(params.row.id)}
+                  sx={{
+                    ...actionIconSx,
+                    borderColor: "rgba(239, 68, 68, 0.35)",
+                    "&:hover": { bgcolor: "rgba(239, 68, 68, 0.06)" },
+                  }}
+                >
+                  <DeleteOutlineIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </span>
             </Tooltip>
           </Stack>
         ),
       },
     ],
-    [navigate]
+    [navigate, me?.id]
   );
 
   return (
     <Box sx={{ minWidth: 0 }}>
       <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: "1.25rem", sm: "1.5rem" } }}>
-        Categories
+        Users
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Manage the taxonomy: roots and subcategories. Published posts must use a leaf subcategory. Use search, filters,
-        column headers to sort, and export for backups. <strong>Export CSV</strong> downloads the current filter when
-        nothing is selected, or only the <strong>selected rows</strong> when you have a selection.
+        Search by email or name, filter by role, sort columns, export CSV, and open view or role edit. Use{" "}
+        <strong>New user</strong> to create an account (email, password, name, role).
       </Typography>
 
       {listError && (
@@ -308,42 +259,27 @@ export function CategoriesAdminPage() {
         <TextField
           size="small"
           label="Search"
-          placeholder="Name or slug"
+          placeholder="Email or name"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           sx={{ minWidth: 220, flex: 1 }}
         />
         <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Level</InputLabel>
-          <Select label="Level" value={level} onChange={(e) => setLevel(e.target.value as LevelFilter)}>
-            <MenuItem value="all">All</MenuItem>
-            <MenuItem value="root">Root only</MenuItem>
-            <MenuItem value="child">Subcategories</MenuItem>
+          <InputLabel>Role</InputLabel>
+          <Select label="Role" value={role} onChange={(e) => setRole(e.target.value as typeof role)}>
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="admin">Admin</MenuItem>
+            <MenuItem value="user">User</MenuItem>
           </Select>
         </FormControl>
-        {level === "child" && (
-          <FormControl size="small" sx={{ minWidth: 200 }}>
-            <InputLabel>Parent root</InputLabel>
-            <Select label="Parent root" value={parentId} onChange={(e) => setParentId(e.target.value)}>
-              <MenuItem value="">
-                <em>Any root</em>
-              </MenuItem>
-              {roots.map((r) => (
-                <MenuItem key={r.id} value={r.id}>
-                  {r.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        )}
-        <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={() => navigate("/categories/new")}>
-          New category
+        <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={() => navigate("/users/new")}>
+          New user
         </Button>
         <Tooltip
           title={
             selectedIds.length > 0
-              ? `Download ${selectedIds.length} selected categories as CSV`
-              : "Download all categories matching the current search and filters (up to server limit)"
+              ? `Download ${selectedIds.length} selected users as CSV`
+              : "Download users matching the current search and filters"
           }
         >
           <Button variant="outlined" startIcon={<DownloadIcon />} onClick={() => void handleExport()}>
@@ -427,15 +363,13 @@ export function CategoriesAdminPage() {
               "& .MuiDataGrid-row": { maxHeight: "unset" },
             }}
             slotProps={{
-              pagination: {
-                labelRowsPerPage: "Rows per page",
-              },
+              pagination: { labelRowsPerPage: "Rows per page" },
             }}
           />
         </Paper>
       </Box>
 
-      <DeleteCategoryDialog
+      <DeleteUserDialog
         open={Boolean(deleteId)}
         id={deleteId}
         onClose={() => setDeleteId(null)}
@@ -444,10 +378,11 @@ export function CategoriesAdminPage() {
           void refetch();
         }}
       />
-      <BulkDeleteCategoriesDialog
+      <BulkDeleteUsersDialog
         open={bulkDeleteOpen}
         ids={selectedIds}
         rowsById={knownRowsRef.current}
+        selfId={me?.id}
         onClose={() => setBulkDeleteOpen(false)}
         onFinished={({ deleted, errors, total }) => {
           setRowSelectionModel([]);
@@ -456,14 +391,10 @@ export function CategoriesAdminPage() {
             setBulkFeedback(
               `Removed ${deleted} of ${total}. Errors:\n${errors.slice(0, 10).join("\n")}${errors.length > 10 ? "\n…" : ""}`
             );
-          } else if (deleted < total) {
-            setBulkFeedback(
-              `Removed ${deleted} of ${total}. Others could not be deleted (for example, they still have posts or subcategories).`
-            );
           } else if (deleted > 0) {
-            setBulkFeedback(`Removed ${deleted} categories.`);
+            setBulkFeedback(`Removed ${deleted} user(s).`);
           } else {
-            setBulkFeedback("No categories were removed.");
+            setBulkFeedback("No users were removed.");
           }
         }}
       />

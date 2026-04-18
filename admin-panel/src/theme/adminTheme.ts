@@ -255,3 +255,11 @@ export const dataGridAdminSx = {
   },
   "& .MuiDataGrid-columnSeparator": { display: "none" },
 } as const;
+
+/** Centers admin content on very wide monitors; keeps flex children from overflowing horizontally. */
+export const adminMainContentInnerSx = {
+  width: "100%",
+  minWidth: 0,
+  maxWidth: { xl: 1520 },
+  mx: { xl: "auto" },
+} as const;

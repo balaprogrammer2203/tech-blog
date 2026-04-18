@@ -51,6 +51,14 @@ export const adminUserRoleSchema = z.object({
   role: z.enum(["user", "admin"]),
 });
 
+/** Admin creates a user account (no auto-login; password sets credentials). */
+export const adminUserCreateSchema = z.object({
+  email: z.string().email().max(254),
+  password: z.string().min(8).max(72),
+  name: z.string().min(1).max(80),
+  role: z.enum(["user", "admin"]).default("user"),
+});
+
 export const adminCategoryListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(25),
@@ -74,4 +82,33 @@ export const adminCategoryUpdateSchema = adminCategoryCreateSchema.partial();
 /** Export specific categories by id (POST body). */
 export const adminCategoryExportByIdsSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(500),
+});
+
+export const adminPostListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  q: z.string().optional(),
+  status: z.enum(["draft", "published"]).optional(),
+  categorySlug: z.string().optional(),
+  sortField: z
+    .enum(["title", "slug", "status", "updatedAt", "publishedAt", "createdAt", "likeCount", "commentCount"])
+    .default("updatedAt"),
+  sortOrder: z.enum(["asc", "desc"]).default("desc"),
+});
+
+export const adminUserListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  q: z.string().optional(),
+  role: z.enum(["admin", "user"]).optional(),
+  sortField: z.enum(["email", "name", "role", "createdAt"]).default("createdAt"),
+  sortOrder: z.enum(["asc", "desc"]).default("desc"),
+});
+
+export const adminPostExportByIdsSchema = adminCategoryExportByIdsSchema;
+export const adminUserExportByIdsSchema = adminCategoryExportByIdsSchema;
+
+/** Admin creates a post; optional authorId assigns another user as author. */
+export const adminPostCreateSchema = postCreateSchema.extend({
+  authorId: z.string().optional(),
 });

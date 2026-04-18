@@ -23,8 +23,14 @@ import PeopleOutlineIcon from "@mui/icons-material/PeopleOutline";
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
 import { SessionBootstrap } from "@/components/SessionBootstrap";
 import { LoginPage } from "@/pages/LoginPage";
-import { PostsAdminPage } from "@/pages/PostsAdminPage";
-import { UsersAdminPage } from "@/pages/UsersAdminPage";
+import { PostsAdminPage } from "@/pages/posts/PostsAdminPage";
+import { PostCreatePage } from "@/pages/posts/PostCreatePage";
+import { PostEditPage } from "@/pages/posts/PostEditPage";
+import { PostViewPage } from "@/pages/posts/PostViewPage";
+import { UsersAdminPage } from "@/pages/users/UsersAdminPage";
+import { UserViewPage } from "@/pages/users/UserViewPage";
+import { UserEditPage } from "@/pages/users/UserEditPage";
+import { UserCreatePage } from "@/pages/users/UserCreatePage";
 import { ReportsAdminPage } from "@/pages/ReportsAdminPage";
 import { CategoriesAdminPage } from "@/pages/CategoriesAdminPage";
 import { CategoryCreatePage } from "@/pages/categories/CategoryCreatePage";
@@ -33,6 +39,7 @@ import { CategoryViewPage } from "@/pages/categories/CategoryViewPage";
 import { DashboardAdminPage } from "@/pages/DashboardAdminPage";
 import { useAppSelector } from "@/store/hooks";
 import { useLogoutMutation } from "@/store/baseApi";
+import { adminMainContentInnerSx } from "@/theme/adminTheme";
 
 const drawerWidth = 220;
 
@@ -66,12 +73,19 @@ function AdminShell({ children }: { children: ReactNode }) {
           const selected =
             it.path === "/categories"
               ? location.pathname === "/categories" || location.pathname.startsWith("/categories/")
-              : location.pathname === it.path;
+              : it.path === "/posts"
+                ? location.pathname === "/posts" || location.pathname.startsWith("/posts/")
+                : it.path === "/users"
+                  ? location.pathname === "/users" || location.pathname.startsWith("/users/")
+                  : location.pathname === it.path;
           return (
             <ListItemButton
               key={it.path}
               selected={selected}
-              onClick={() => navigate(it.path)}
+              onClick={() => {
+                navigate(it.path);
+                setMobileOpen(false);
+              }}
               sx={{
                 borderRadius: 2,
                 mb: 0.25,
@@ -106,16 +120,25 @@ function AdminShell({ children }: { children: ReactNode }) {
   return (
     <Box sx={{ display: "flex" }}>
       <AppBar position="fixed" elevation={0} sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
-        <Toolbar>
+        <Toolbar sx={{ pt: "env(safe-area-inset-top, 0px)" }}>
           <IconButton
             edge="start"
             onClick={() => setMobileOpen(true)}
-            sx={{ mr: 2, display: { sm: "none" }, color: "text.secondary" }}
+            sx={{ mr: 2, display: { md: "none" }, color: "text.secondary" }}
             aria-label="open menu"
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap sx={{ flexGrow: 1, fontWeight: 600, fontSize: "1rem", color: "text.primary" }}>
+          <Typography
+            variant="h6"
+            noWrap
+            sx={{
+              flexGrow: 1,
+              fontWeight: 600,
+              fontSize: { xs: "0.9375rem", sm: "1rem" },
+              color: "text.primary",
+            }}
+          >
             Moderation
           </Typography>
           <IconButton onClick={() => void logout()} sx={{ color: "text.secondary" }} aria-label="log out">
@@ -123,20 +146,20 @@ function AdminShell({ children }: { children: ReactNode }) {
           </IconButton>
         </Toolbar>
       </AppBar>
-      <Box component="nav" sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}>
+      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
         <Drawer
           variant="temporary"
           open={mobileOpen}
           onClose={() => setMobileOpen(false)}
           ModalProps={{ keepMounted: true }}
-          sx={{ display: { xs: "block", sm: "none" }, "& .MuiDrawer-paper": { boxSizing: "border-box", width: drawerWidth } }}
+          sx={{ display: { xs: "block", md: "none" }, "& .MuiDrawer-paper": { boxSizing: "border-box", width: drawerWidth } }}
         >
           {drawer}
         </Drawer>
         <Drawer
           variant="permanent"
           sx={{
-            display: { xs: "none", sm: "block" },
+            display: { xs: "none", md: "block" },
             "& .MuiDrawer-paper": { boxSizing: "border-box", width: drawerWidth },
           }}
         >
@@ -147,14 +170,16 @@ function AdminShell({ children }: { children: ReactNode }) {
         component="main"
         sx={{
           flexGrow: 1,
-          p: { xs: 2, sm: 3 },
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          minWidth: 0,
+          overflowX: "auto",
+          p: { xs: 1.5, sm: 2, md: 2.5, lg: 3 },
+          width: { xs: "100%", md: `calc(100% - ${drawerWidth}px)` },
           minHeight: "100vh",
           bgcolor: "background.default",
         }}
       >
         <Toolbar />
-        {children}
+        <Box sx={adminMainContentInnerSx}>{children}</Box>
       </Box>
     </Box>
   );
@@ -179,6 +204,36 @@ export default function App() {
             <RequireAdmin>
               <AdminShell>
                 <DashboardAdminPage />
+              </AdminShell>
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/posts/new"
+          element={
+            <RequireAdmin>
+              <AdminShell>
+                <PostCreatePage />
+              </AdminShell>
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/posts/:postId/edit"
+          element={
+            <RequireAdmin>
+              <AdminShell>
+                <PostEditPage />
+              </AdminShell>
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/posts/:postId"
+          element={
+            <RequireAdmin>
+              <AdminShell>
+                <PostViewPage />
               </AdminShell>
             </RequireAdmin>
           }
@@ -229,6 +284,36 @@ export default function App() {
             <RequireAdmin>
               <AdminShell>
                 <CategoriesAdminPage />
+              </AdminShell>
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/users/new"
+          element={
+            <RequireAdmin>
+              <AdminShell>
+                <UserCreatePage />
+              </AdminShell>
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/users/:userId/edit"
+          element={
+            <RequireAdmin>
+              <AdminShell>
+                <UserEditPage />
+              </AdminShell>
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/users/:userId"
+          element={
+            <RequireAdmin>
+              <AdminShell>
+                <UserViewPage />
               </AdminShell>
             </RequireAdmin>
           }

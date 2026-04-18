@@ -36,6 +36,32 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 
 export type Paginated<T> = { items: T[]; page: number; limit: number; total: number; totalPages: number };
 
+export type AdminPostListRow = {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string;
+  status: string;
+  publishedAt?: string;
+  updatedAt?: string;
+  createdAt?: string;
+  likeCount: number;
+  commentCount: number;
+  author: { id: string; email: string; name: string } | null;
+  category: PostCategory;
+};
+
+export type AdminPostDetail = AdminPostListRow & {
+  content: string;
+  tags: string[];
+  coverImageUrl?: string;
+  readTimeMinutes?: number;
+};
+
+export type AdminUserListRow = { id: string; email: string; name: string; role: string; createdAt: string };
+
+export type AdminUserDetail = AdminUserListRow & { updatedAt?: string; isSelf: boolean };
+
 export type AdminDashboardResponse = {
   generatedAt: string;
   posts: { total: number; published: number; draft: number; publishedLast7Days: number };
@@ -154,32 +180,70 @@ export const baseApi = createApi({
       invalidatesTags: ["AdminCategories", "Categories", "AdminDashboard"],
     }),
     adminPosts: build.query<
-      Paginated<{
-        id: string;
-        title: string;
-        slug: string;
-        excerpt: string;
-        status: string;
-        publishedAt?: string;
-        updatedAt?: string;
-        likeCount: number;
-        commentCount: number;
-        author: { id: string; email: string; name: string } | null;
-        category: PostCategory;
-      }>,
-      { page: number; status?: string; category?: string; categorySlug?: string }
+      Paginated<AdminPostListRow>,
+      {
+        page: number;
+        limit: number;
+        q?: string;
+        status?: "draft" | "published";
+        categorySlug?: string;
+        sortField: "title" | "slug" | "status" | "updatedAt" | "publishedAt" | "createdAt" | "likeCount" | "commentCount";
+        sortOrder: "asc" | "desc";
+      }
     >({
-      query: ({ page, status, category, categorySlug }) => ({
+      query: ({ page, limit, q, status, categorySlug, sortField, sortOrder }) => ({
         url: "/api/admin/users/posts",
         params: {
           page,
-          limit: 20,
+          limit,
+          sortField,
+          sortOrder,
+          ...(q ? { q } : {}),
           ...(status ? { status } : {}),
-          ...(category ? { category } : {}),
           ...(categorySlug ? { categorySlug } : {}),
         },
       }),
       providesTags: ["AdminPosts"],
+    }),
+    adminPostDetail: build.query<AdminPostDetail, string>({
+      query: (id) => `/api/admin/users/posts/${id}`,
+      providesTags: (_r, _e, id) => [{ type: "AdminPosts", id }],
+    }),
+    createAdminPost: build.mutation<
+      { id: string; slug: string },
+      {
+        title: string;
+        excerpt: string;
+        content: string;
+        tags?: string[];
+        status?: "draft" | "published";
+        categoryId?: string;
+        coverImageUrl?: string;
+        readTimeMinutes?: number;
+        authorId?: string;
+      }
+    >({
+      query: (body) => ({ url: "/api/admin/users/posts", method: "POST", body }),
+      invalidatesTags: ["AdminPosts", "AdminDashboard"],
+    }),
+    updateAdminPost: build.mutation<
+      { id: string; slug: string },
+      {
+        id: string;
+        body: Partial<{
+          title: string;
+          excerpt: string;
+          content: string;
+          tags: string[];
+          status: "draft" | "published";
+          categoryId: string;
+          coverImageUrl: string;
+          readTimeMinutes: number;
+        }>;
+      }
+    >({
+      query: ({ id, body }) => ({ url: `/api/admin/users/posts/${id}`, method: "PATCH", body }),
+      invalidatesTags: (_r, _e, { id }) => ["AdminPosts", "AdminDashboard", { type: "AdminPosts", id }],
     }),
     setPostStatus: build.mutation<void, { id: string; status: "draft" | "published" }>({
       query: ({ id, status }) => ({
@@ -187,21 +251,46 @@ export const baseApi = createApi({
         method: "PATCH",
         body: { status },
       }),
-      invalidatesTags: ["AdminPosts", "AdminDashboard"],
+      invalidatesTags: (_r, _e, { id }) => ["AdminPosts", "AdminDashboard", { type: "AdminPosts", id }],
     }),
     deletePost: build.mutation<void, string>({
       query: (id) => ({ url: `/api/admin/users/posts/${id}`, method: "DELETE" }),
-      invalidatesTags: ["AdminPosts", "AdminDashboard"],
+      invalidatesTags: (_r, _e, id) => ["AdminPosts", "AdminDashboard", { type: "AdminPosts", id }],
     }),
     adminUsers: build.query<
-      Paginated<{ id: string; email: string; name: string; role: string; createdAt: string }>,
-      { page: number; q?: string }
+      Paginated<AdminUserListRow>,
+      {
+        page: number;
+        limit: number;
+        q?: string;
+        role?: "admin" | "user";
+        sortField: "email" | "name" | "role" | "createdAt";
+        sortOrder: "asc" | "desc";
+      }
     >({
-      query: ({ page, q }) => ({
+      query: ({ page, limit, q, role, sortField, sortOrder }) => ({
         url: "/api/admin/users",
-        params: { page, limit: 20, ...(q ? { q } : {}) },
+        params: {
+          page,
+          limit,
+          sortField,
+          sortOrder,
+          ...(q ? { q } : {}),
+          ...(role ? { role } : {}),
+        },
       }),
       providesTags: ["AdminUsers"],
+    }),
+    adminUserDetail: build.query<AdminUserDetail, string>({
+      query: (id) => `/api/admin/users/${id}`,
+      providesTags: (_r, _e, id) => [{ type: "AdminUsers", id }],
+    }),
+    createAdminUser: build.mutation<
+      { id: string; email: string; name: string; role: string; createdAt: string },
+      { email: string; password: string; name: string; role?: "user" | "admin" }
+    >({
+      query: (body) => ({ url: "/api/admin/users", method: "POST", body }),
+      invalidatesTags: ["AdminUsers", "AdminDashboard"],
     }),
     setUserRole: build.mutation<void, { id: string; role: "user" | "admin" }>({
       query: ({ id, role }) => ({
@@ -209,11 +298,11 @@ export const baseApi = createApi({
         method: "PATCH",
         body: { role },
       }),
-      invalidatesTags: ["AdminUsers", "AdminDashboard"],
+      invalidatesTags: (_r, _e, { id }) => ["AdminUsers", "AdminDashboard", { type: "AdminUsers", id }],
     }),
     deleteUser: build.mutation<void, string>({
       query: (id) => ({ url: `/api/admin/users/${id}`, method: "DELETE" }),
-      invalidatesTags: ["AdminUsers", "AdminPosts", "AdminDashboard"],
+      invalidatesTags: (_r, _e, id) => ["AdminUsers", "AdminPosts", "AdminDashboard", { type: "AdminUsers", id }],
     }),
     adminReports: build.query<
       Paginated<{
@@ -256,9 +345,14 @@ export const {
   useUpdateAdminCategoryMutation,
   useDeleteAdminCategoryMutation,
   useAdminPostsQuery,
+  useAdminPostDetailQuery,
+  useCreateAdminPostMutation,
+  useUpdateAdminPostMutation,
   useSetPostStatusMutation,
   useDeletePostMutation,
   useAdminUsersQuery,
+  useAdminUserDetailQuery,
+  useCreateAdminUserMutation,
   useSetUserRoleMutation,
   useDeleteUserMutation,
   useAdminReportsQuery,

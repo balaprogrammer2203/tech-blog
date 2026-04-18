@@ -30,9 +30,27 @@ export function LoginPage() {
   }
 
   return (
-    <Container maxWidth="sm" sx={{ py: 8, minHeight: "100vh", bgcolor: "background.default" }}>
-      <Paper variant="outlined" sx={{ p: 4, borderRadius: 2, boxShadow: "0 1px 3px rgba(17, 24, 39, 0.06)" }}>
-        <Typography variant="h5" gutterBottom>
+    <Container
+      maxWidth="sm"
+      sx={{
+        px: { xs: 2, sm: 3 },
+        py: { xs: 4, sm: 6, md: 8 },
+        minHeight: "100vh",
+        bgcolor: "background.default",
+        display: "flex",
+        alignItems: "center",
+      }}
+    >
+      <Paper
+        variant="outlined"
+        sx={{
+          p: { xs: 2.5, sm: 3, md: 4 },
+          borderRadius: 2,
+          boxShadow: "0 1px 3px rgba(17, 24, 39, 0.06)",
+          width: "100%",
+        }}
+      >
+        <Typography variant="h5" gutterBottom sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" } }}>
           Admin sign in
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

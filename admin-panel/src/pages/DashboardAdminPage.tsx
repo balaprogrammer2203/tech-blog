@@ -6,9 +6,11 @@ import {
   Divider,
   LinearProgress,
   Paper,
+  Stack,
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Typography,
@@ -40,7 +42,11 @@ function StatCard({
       <Typography variant="overline" color="text.secondary" display="block" sx={{ lineHeight: 1.2 }}>
         {label}
       </Typography>
-      <Typography variant="h4" component="p" sx={{ my: 0.5, fontWeight: 600 }}>
+      <Typography
+        variant="h4"
+        component="p"
+        sx={{ my: 0.5, fontWeight: 600, fontSize: { xs: "1.35rem", sm: "1.65rem", md: "2rem" }, lineHeight: 1.2 }}
+      >
         {value}
       </Typography>
       {hint ? (
@@ -64,8 +70,8 @@ export function DashboardAdminPage() {
   const { data, isFetching, isError, refetch } = useAdminDashboardQuery();
 
   return (
-    <Box>
-      <Typography variant="h5" gutterBottom>
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant="h5" gutterBottom sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" }, fontWeight: 700 }}>
         Dashboard
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -74,16 +80,15 @@ export function DashboardAdminPage() {
       </Typography>
 
       {isError && (
-        <Alert
-          severity="error"
-          sx={{ mb: 2 }}
-          action={
-            <Button color="inherit" size="small" onClick={() => void refetch()}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "center" }}>
+            <Typography variant="body2" component="span" sx={{ flex: 1 }}>
+              Could not load dashboard metrics.
+            </Typography>
+            <Button color="inherit" size="small" onClick={() => void refetch()} sx={{ width: { xs: "100%", sm: "auto" }, flexShrink: 0 }}>
               Retry
             </Button>
-          }
-        >
-          Could not load dashboard metrics.
+          </Stack>
         </Alert>
       )}
 
@@ -93,10 +98,19 @@ export function DashboardAdminPage() {
         <>
           {data.reports.pending > 0 && (
             <Alert severity="warning" sx={{ mb: 2 }}>
-              {data.reports.pending} report{data.reports.pending === 1 ? "" : "s"} awaiting review.{" "}
-              <Button component={RouterLink} to="/reports" size="small" sx={{ ml: 1 }}>
-                Open reports
-              </Button>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "center" }}>
+                <Typography variant="body2" component="span" sx={{ flex: 1 }}>
+                  {data.reports.pending} report{data.reports.pending === 1 ? "" : "s"} awaiting review.
+                </Typography>
+                <Button
+                  component={RouterLink}
+                  to="/reports"
+                  size="small"
+                  sx={{ width: { xs: "100%", sm: "auto" }, flexShrink: 0, whiteSpace: "nowrap" }}
+                >
+                  Open reports
+                </Button>
+              </Stack>
             </Alert>
           )}
 
@@ -107,7 +121,12 @@ export function DashboardAdminPage() {
             sx={{
               display: "grid",
               gap: 2,
-              gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" },
+              gridTemplateColumns: {
+                xs: "1fr",
+                sm: "repeat(2, 1fr)",
+                md: "repeat(3, 1fr)",
+                lg: "repeat(4, 1fr)",
+              },
               mb: 3,
             }}
           >
@@ -132,7 +151,12 @@ export function DashboardAdminPage() {
             sx={{
               display: "grid",
               gap: 2,
-              gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" },
+              gridTemplateColumns: {
+                xs: "1fr",
+                sm: "repeat(2, 1fr)",
+                md: "repeat(3, 1fr)",
+                lg: "repeat(4, 1fr)",
+              },
               mb: 3,
             }}
           >
@@ -144,20 +168,20 @@ export function DashboardAdminPage() {
             <StatCard label="Reports dismissed" value={data.reports.dismissed} />
           </Box>
 
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 3 }}>
-            <Button component={RouterLink} to="/posts" variant="contained" size="small">
+          <Stack direction={{ xs: "column", sm: "row" }} flexWrap="wrap" useFlexGap spacing={1} sx={{ mb: 3 }}>
+            <Button component={RouterLink} to="/posts" variant="contained" size="small" sx={{ width: { xs: "100%", sm: "auto" } }}>
               Manage posts
             </Button>
-            <Button component={RouterLink} to="/categories" variant="outlined" size="small">
+            <Button component={RouterLink} to="/categories" variant="outlined" size="small" sx={{ width: { xs: "100%", sm: "auto" } }}>
               Categories
             </Button>
-            <Button component={RouterLink} to="/users" variant="outlined" size="small">
+            <Button component={RouterLink} to="/users" variant="outlined" size="small" sx={{ width: { xs: "100%", sm: "auto" } }}>
               Users
             </Button>
-            <Button component={RouterLink} to="/reports" variant="outlined" size="small">
+            <Button component={RouterLink} to="/reports" variant="outlined" size="small" sx={{ width: { xs: "100%", sm: "auto" } }}>
               Reports
             </Button>
-          </Box>
+          </Stack>
 
           <Divider sx={{ my: 2 }} />
 
@@ -169,17 +193,24 @@ export function DashboardAdminPage() {
               alignItems: "start",
             }}
           >
-            <Box>
-              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+            <Box sx={{ minWidth: 0 }}>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                alignItems={{ xs: "flex-start", sm: "center" }}
+                justifyContent="space-between"
+                spacing={1}
+                sx={{ mb: 1 }}
+              >
                 <Typography variant="subtitle1" fontWeight={600}>
                   Recently updated posts
                 </Typography>
-                <Button component={RouterLink} to="/posts" size="small">
+                <Button component={RouterLink} to="/posts" size="small" sx={{ flexShrink: 0, width: { xs: "100%", sm: "auto" } }}>
                   View all
                 </Button>
-              </Box>
-              <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden", bgcolor: "background.paper" }}>
-                <Table size="small">
+              </Stack>
+              <Paper variant="outlined" sx={{ borderRadius: 2, bgcolor: "background.paper" }}>
+                <TableContainer sx={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                  <Table size="small" sx={{ minWidth: 640 }}>
                   <TableHead>
                     <TableRow>
                       <TableCell>Title</TableCell>
@@ -234,20 +265,28 @@ export function DashboardAdminPage() {
                     )}
                   </TableBody>
                 </Table>
+                </TableContainer>
               </Paper>
             </Box>
 
-            <Box>
-              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+            <Box sx={{ minWidth: 0 }}>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                alignItems={{ xs: "flex-start", sm: "center" }}
+                justifyContent="space-between"
+                spacing={1}
+                sx={{ mb: 1 }}
+              >
                 <Typography variant="subtitle1" fontWeight={600}>
                   Pending reports
                 </Typography>
-                <Button component={RouterLink} to="/reports" size="small">
+                <Button component={RouterLink} to="/reports" size="small" sx={{ flexShrink: 0, width: { xs: "100%", sm: "auto" } }}>
                   View all
                 </Button>
-              </Box>
-              <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden", bgcolor: "background.paper" }}>
-                <Table size="small">
+              </Stack>
+              <Paper variant="outlined" sx={{ borderRadius: 2, bgcolor: "background.paper" }}>
+                <TableContainer sx={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                  <Table size="small" sx={{ minWidth: 520 }}>
                   <TableHead>
                     <TableRow>
                       <TableCell>Target</TableCell>
@@ -289,6 +328,7 @@ export function DashboardAdminPage() {
                     )}
                   </TableBody>
                 </Table>
+                </TableContainer>
               </Paper>
             </Box>
           </Box>

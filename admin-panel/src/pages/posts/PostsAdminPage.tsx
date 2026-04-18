@@ -20,6 +20,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import DownloadIcon from "@mui/icons-material/Download";
 import EditIcon from "@mui/icons-material/Edit";
+import PublishIcon from "@mui/icons-material/Publish";
+import UnpublishedIcon from "@mui/icons-material/Unpublished";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useSelector } from "react-redux";
@@ -31,13 +33,18 @@ import {
   type GridRowSelectionModel,
   type GridSortModel,
 } from "@mui/x-data-grid";
-import { useAdminCategoryListQuery, useCategoriesTreeQuery } from "@/store/baseApi";
+import {
+  useAdminPostsQuery,
+  useCategoriesTreeQuery,
+  useSetPostStatusMutation,
+} from "@/store/baseApi";
+import type { AdminPostListRow } from "@/store/baseApi";
 import type { RootState } from "@/store/store";
-import type { AdminCategoryRow } from "@/types/categories";
-import { apiErrorMessage } from "./categories/apiErrorMessage";
-import { BulkDeleteCategoriesDialog } from "./categories/BulkDeleteCategoriesDialog";
-import { DeleteCategoryDialog } from "./categories/DeleteCategoryDialog";
-import { downloadCategoriesExport } from "./categories/categoryCsvExport";
+import type { CategoryChild } from "@/types/categories";
+import { apiErrorMessage } from "../categories/apiErrorMessage";
+import { BulkDeletePostsDialog } from "./BulkDeletePostsDialog";
+import { DeletePostDialog } from "./DeletePostDialog";
+import { downloadPostsExport } from "./postCsvExport";
 import { adminLayout, dataGridAdminSx } from "@/theme/adminTheme";
 
 const actionIconSx = {
@@ -52,21 +59,31 @@ function listErrorMessage(e: unknown, fallback: string): string {
   return apiErrorMessage(e as FetchBaseQueryError, fallback);
 }
 
-type LevelFilter = "all" | "root" | "child";
+function flattenLeaves(roots: { children: CategoryChild[] }[] | undefined): { slug: string; label: string }[] {
+  if (!roots) return [];
+  const out: { slug: string; label: string }[] = [];
+  for (const r of roots) {
+    for (const ch of r.children) {
+      const parentName = ch.parent?.name ?? "—";
+      out.push({ slug: ch.slug, label: `${parentName} › ${ch.name}` });
+    }
+  }
+  return out.sort((a, b) => a.label.localeCompare(b.label));
+}
 
-const defaultSort: GridSortModel = [{ field: "sortOrder", sort: "asc" }];
+const defaultSort: GridSortModel = [{ field: "updatedAt", sort: "desc" }];
 
-export function CategoriesAdminPage() {
+export function PostsAdminPage() {
   const navigate = useNavigate();
   const apiBase = import.meta.env.VITE_API_URL as string;
   const token = useSelector((s: RootState) => s.auth.accessToken);
 
-  const knownRowsRef = useRef(new Map<string, AdminCategoryRow>());
+  const knownRowsRef = useRef(new Map<string, AdminPostListRow>());
 
   const [searchInput, setSearchInput] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
-  const [level, setLevel] = useState<LevelFilter>("all");
-  const [parentId, setParentId] = useState("");
+  const [status, setStatus] = useState<"" | "draft" | "published">("");
+  const [categorySlug, setCategorySlug] = useState("");
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ page: 0, pageSize: 25 });
   const [sortModel, setSortModel] = useState<GridSortModel>(defaultSort);
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
@@ -76,6 +93,10 @@ export function CategoriesAdminPage() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [bulkFeedback, setBulkFeedback] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const { data: tree } = useCategoriesTreeQuery();
+  const leafOptions = useMemo(() => flattenLeaves(tree?.roots), [tree?.roots]);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQ(searchInput.trim()), 400);
@@ -84,39 +105,36 @@ export function CategoriesAdminPage() {
 
   useEffect(() => {
     setPaginationModel((p) => ({ ...p, page: 0 }));
-  }, [debouncedQ, level, parentId]);
-
-  useEffect(() => {
-    if (level !== "child") setParentId("");
-  }, [level]);
+  }, [debouncedQ, status, categorySlug]);
 
   useEffect(() => {
     setRowSelectionModel([]);
     knownRowsRef.current = new Map();
-  }, [debouncedQ, level, parentId]);
+  }, [debouncedQ, status, categorySlug]);
 
   const rawField = sortModel[0]?.field;
-  const allowedSort: "name" | "slug" | "sortOrder" | "createdAt" | "postCount" =
-    rawField && ["name", "slug", "sortOrder", "createdAt", "postCount"].includes(String(rawField))
-      ? (String(rawField) as "name" | "slug" | "sortOrder" | "createdAt" | "postCount")
-      : "sortOrder";
-  const sortOrderDir: "asc" | "desc" = sortModel[0]?.sort === "desc" ? "desc" : "asc";
+  const allowedSort: "title" | "slug" | "status" | "updatedAt" | "publishedAt" | "createdAt" | "likeCount" | "commentCount" =
+    rawField &&
+    ["title", "slug", "status", "updatedAt", "publishedAt", "createdAt", "likeCount", "commentCount"].includes(String(rawField))
+      ? (String(rawField) as "title" | "slug" | "status" | "updatedAt" | "publishedAt" | "createdAt" | "likeCount" | "commentCount")
+      : "updatedAt";
+  const sortOrderDir: "asc" | "desc" = sortModel[0]?.sort === "asc" ? "asc" : "desc";
 
   const listArgs = useMemo(
     () => ({
       page: paginationModel.page + 1,
       limit: paginationModel.pageSize,
       q: debouncedQ || undefined,
-      level: level === "all" ? undefined : level,
-      parentId: level === "child" && parentId ? parentId : undefined,
+      status: status || undefined,
+      categorySlug: categorySlug || undefined,
       sortField: allowedSort,
       sortOrder: sortOrderDir,
     }),
-    [paginationModel, debouncedQ, level, parentId, allowedSort, sortOrderDir]
+    [paginationModel, debouncedQ, status, categorySlug, allowedSort, sortOrderDir]
   );
 
-  const { data, isFetching, isError, error, refetch } = useAdminCategoryListQuery(listArgs);
-  const { data: tree } = useCategoriesTreeQuery();
+  const { data, isFetching, isError, error, refetch } = useAdminPostsQuery(listArgs);
+  const [updatePostStatus] = useSetPostStatusMutation();
 
   useEffect(() => {
     for (const r of data?.items ?? []) {
@@ -125,11 +143,9 @@ export function CategoriesAdminPage() {
   }, [data?.items]);
 
   useEffect(() => {
-    if (isError) setListError(listErrorMessage(error, "Failed to load categories."));
+    if (isError) setListError(listErrorMessage(error, "Failed to load posts."));
     else setListError(null);
   }, [isError, error]);
-
-  const roots = tree?.roots ?? [];
 
   const selectedIds = useMemo(() => [...rowSelectionModel].map((id) => String(id)), [rowSelectionModel]);
 
@@ -137,31 +153,31 @@ export function CategoriesAdminPage() {
     setExportError(null);
     try {
       if (selectedIds.length > 0) {
-        await downloadCategoriesExport(apiBase, token, { scope: "selected", ids: [...selectedIds] });
+        await downloadPostsExport(apiBase, token, { scope: "selected", ids: [...selectedIds] });
       } else {
-        await downloadCategoriesExport(apiBase, token, {
+        await downloadPostsExport(apiBase, token, {
           scope: "filter",
           q: debouncedQ || undefined,
-          level,
-          parentId: level === "child" && parentId ? parentId : undefined,
+          status: status || undefined,
+          categorySlug: categorySlug || undefined,
         });
       }
     } catch (e) {
       setExportError(e instanceof Error ? e.message : "Export failed.");
     }
-  }, [apiBase, token, debouncedQ, level, parentId, selectedIds]);
+  }, [apiBase, token, debouncedQ, status, categorySlug, selectedIds]);
 
-  const columns: GridColDef<AdminCategoryRow>[] = useMemo(
+  const columns: GridColDef<AdminPostListRow>[] = useMemo(
     () => [
       {
-        field: "name",
-        headerName: "Name",
+        field: "title",
+        headerName: "Title",
         flex: 1,
-        minWidth: 180,
+        minWidth: 200,
         renderCell: (p) => (
           <Box sx={{ py: 0.5, minWidth: 0 }}>
-            <Typography variant="body2" sx={{ fontWeight: 700, color: adminLayout.textPrimary, lineHeight: 1.25 }} noWrap title={p.row.name}>
-              {p.row.name}
+            <Typography variant="body2" sx={{ fontWeight: 700, color: adminLayout.textPrimary, lineHeight: 1.25 }} noWrap title={p.row.title}>
+              {p.row.title}
             </Typography>
             <Typography variant="caption" sx={{ color: adminLayout.textMuted, display: "block", lineHeight: 1.2 }} noWrap title={p.row.slug}>
               {p.row.slug}
@@ -170,34 +186,15 @@ export function CategoriesAdminPage() {
         ),
       },
       {
-        field: "level",
-        headerName: "Level",
-        width: 100,
+        field: "category",
+        headerName: "Category",
+        flex: 0.8,
+        minWidth: 140,
         sortable: false,
-        align: "center",
-        headerAlign: "center",
+        valueGetter: (_v, row) =>
+          row.category ? `${row.category.parent.name} › ${row.category.name}` : "—",
         renderCell: (p) => {
-          const root = p.row.level === 0;
-          return (
-            <Chip
-              size="small"
-              label={root ? "Root" : "Sub"}
-              color={root ? "success" : "secondary"}
-              variant="filled"
-              sx={{ fontWeight: 700, minWidth: 72 }}
-            />
-          );
-        },
-      },
-      {
-        field: "parentName",
-        headerName: "Parent",
-        flex: 0.7,
-        minWidth: 120,
-        sortable: false,
-        valueGetter: (_v, row) => row.parentName ?? "—",
-        renderCell: (p) => {
-          const label = p.row.parentName ?? "—";
+          const label = p.row.category ? `${p.row.category.parent.name} › ${p.row.category.name}` : "—";
           return (
             <Typography variant="body2" color="text.secondary" noWrap title={label}>
               {label}
@@ -206,85 +203,134 @@ export function CategoriesAdminPage() {
         },
       },
       {
-        field: "postCount",
-        headerName: "Posts",
-        type: "number",
-        width: 88,
+        field: "author",
+        headerName: "Author",
+        flex: 0.7,
+        minWidth: 140,
+        sortable: false,
         renderCell: (p) => (
-          <Typography variant="body2" sx={{ fontWeight: 600, color: adminLayout.textPrimary }}>
-            {p.value}
+          <Typography variant="body2" color="text.secondary" noWrap title={p.row.author?.email ?? ""}>
+            {p.row.author?.email ?? "—"}
           </Typography>
         ),
       },
       {
-        field: "sortOrder",
-        headerName: "Order",
-        type: "number",
-        width: 80,
+        field: "status",
+        headerName: "Status",
+        width: 110,
         renderCell: (p) => (
-          <Typography variant="body2" color="text.secondary">
-            {p.value}
-          </Typography>
+          <Chip
+            size="small"
+            label={p.row.status}
+            color={p.row.status === "published" ? "success" : "secondary"}
+            variant="filled"
+            sx={{ fontWeight: 700, textTransform: "capitalize", minWidth: 88 }}
+          />
         ),
       },
+      { field: "likeCount", headerName: "Likes", type: "number", width: 80 },
+      { field: "commentCount", headerName: "Comments", type: "number", width: 100 },
       {
-        field: "createdAt",
-        headerName: "Created",
+        field: "updatedAt",
+        headerName: "Updated",
         minWidth: 120,
-        valueFormatter: (v) => (v ? new Date(String(v)).toLocaleDateString() : ""),
+        valueFormatter: (v) => (v ? new Date(String(v)).toLocaleString() : ""),
       },
       {
         field: "actions",
         headerName: "Actions",
-        width: 132,
+        width: 176,
         sortable: false,
         filterable: false,
         disableColumnMenu: true,
-        renderCell: (params) => (
-          <Stack direction="row" spacing={0.75} onClick={(e) => e.stopPropagation()} sx={{ py: 0.25 }}>
-            <Tooltip title="View">
-              <IconButton size="small" aria-label="View" onClick={() => navigate(`/categories/${params.row.id}`)} sx={actionIconSx}>
-                <VisibilityIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Edit">
-              <IconButton size="small" aria-label="Edit" onClick={() => navigate(`/categories/${params.row.id}/edit`)} sx={actionIconSx}>
-                <EditIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete">
-              <IconButton
-                size="small"
-                aria-label="Delete"
-                color="error"
-                onClick={() => setDeleteId(params.row.id)}
-                sx={{
-                  ...actionIconSx,
-                  borderColor: "rgba(239, 68, 68, 0.35)",
-                  "&:hover": { bgcolor: "rgba(239, 68, 68, 0.06)" },
-                }}
-              >
-                <DeleteOutlineIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-        ),
+        renderCell: (params) => {
+          const canPublish = params.row.status !== "published" && Boolean(params.row.category);
+          const publishTitle = !params.row.category
+            ? "Assign a leaf category before publishing."
+            : "Publish";
+          return (
+            <Stack direction="row" spacing={0.75} onClick={(e) => e.stopPropagation()} sx={{ py: 0.25 }}>
+              <Tooltip title="View">
+                <IconButton size="small" aria-label="View" onClick={() => navigate(`/posts/${params.row.id}`)} sx={actionIconSx}>
+                  <VisibilityIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Edit">
+                <IconButton size="small" aria-label="Edit" onClick={() => navigate(`/posts/${params.row.id}/edit`)} sx={actionIconSx}>
+                  <EditIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+              {params.row.status === "published" ? (
+                <Tooltip title="Unpublish">
+                  <IconButton
+                    size="small"
+                    aria-label="Unpublish"
+                    onClick={() => void updatePostStatus({ id: params.row.id, status: "draft" })}
+                    sx={actionIconSx}
+                  >
+                    <UnpublishedIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </Tooltip>
+              ) : (
+                <Tooltip title={publishTitle}>
+                  <span>
+                    <IconButton
+                      size="small"
+                      aria-label="Publish"
+                      disabled={!canPublish}
+                      onClick={async () => {
+                        setActionError(null);
+                        try {
+                          await updatePostStatus({ id: params.row.id, status: "published" }).unwrap();
+                        } catch (e) {
+                          setActionError(listErrorMessage(e, "Could not publish."));
+                        }
+                      }}
+                      sx={actionIconSx}
+                    >
+                      <PublishIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
+              <Tooltip title="Delete">
+                <IconButton
+                  size="small"
+                  aria-label="Delete"
+                  color="error"
+                  onClick={() => setDeleteId(params.row.id)}
+                  sx={{
+                    ...actionIconSx,
+                    borderColor: "rgba(239, 68, 68, 0.35)",
+                    "&:hover": { bgcolor: "rgba(239, 68, 68, 0.06)" },
+                  }}
+                >
+                  <DeleteOutlineIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          );
+        },
       },
     ],
-    [navigate]
+    [navigate, updatePostStatus]
   );
 
   return (
     <Box sx={{ minWidth: 0 }}>
       <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: "1.25rem", sm: "1.5rem" } }}>
-        Categories
+        Posts
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Manage the taxonomy: roots and subcategories. Published posts must use a leaf subcategory. Use search, filters,
-        column headers to sort, and export for backups. <strong>Export CSV</strong> downloads the current filter when
-        nothing is selected, or only the <strong>selected rows</strong> when you have a selection.
+        Search, filter by status and leaf category, sort columns, export CSV (current filter or selected rows), and manage
+        posts with view, edit, publish, and delete. <strong>New post</strong> opens the editor.
       </Typography>
 
+      {actionError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setActionError(null)}>
+          {actionError}
+        </Alert>
+      )}
       {listError && (
         <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setListError(null)}>
           {listError}{" "}
@@ -308,42 +354,38 @@ export function CategoriesAdminPage() {
         <TextField
           size="small"
           label="Search"
-          placeholder="Name or slug"
+          placeholder="Title, slug, or excerpt"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           sx={{ minWidth: 220, flex: 1 }}
         />
         <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Level</InputLabel>
-          <Select label="Level" value={level} onChange={(e) => setLevel(e.target.value as LevelFilter)}>
-            <MenuItem value="all">All</MenuItem>
-            <MenuItem value="root">Root only</MenuItem>
-            <MenuItem value="child">Subcategories</MenuItem>
+          <InputLabel>Status</InputLabel>
+          <Select label="Status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="published">Published</MenuItem>
+            <MenuItem value="draft">Draft</MenuItem>
           </Select>
         </FormControl>
-        {level === "child" && (
-          <FormControl size="small" sx={{ minWidth: 200 }}>
-            <InputLabel>Parent root</InputLabel>
-            <Select label="Parent root" value={parentId} onChange={(e) => setParentId(e.target.value)}>
-              <MenuItem value="">
-                <em>Any root</em>
+        <FormControl size="small" sx={{ minWidth: 260 }}>
+          <InputLabel>Leaf category</InputLabel>
+          <Select label="Leaf category" value={categorySlug} onChange={(e) => setCategorySlug(e.target.value)}>
+            <MenuItem value="">All categories</MenuItem>
+            {leafOptions.map((o) => (
+              <MenuItem key={o.slug} value={o.slug}>
+                {o.label}
               </MenuItem>
-              {roots.map((r) => (
-                <MenuItem key={r.id} value={r.id}>
-                  {r.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        )}
-        <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={() => navigate("/categories/new")}>
-          New category
+            ))}
+          </Select>
+        </FormControl>
+        <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={() => navigate("/posts/new")}>
+          New post
         </Button>
         <Tooltip
           title={
             selectedIds.length > 0
-              ? `Download ${selectedIds.length} selected categories as CSV`
-              : "Download all categories matching the current search and filters (up to server limit)"
+              ? `Download ${selectedIds.length} selected posts as CSV`
+              : "Download posts matching the current search and filters (server limit)"
           }
         >
           <Button variant="outlined" startIcon={<DownloadIcon />} onClick={() => void handleExport()}>
@@ -392,7 +434,7 @@ export function CategoriesAdminPage() {
           variant="outlined"
           sx={{
             width: "100%",
-            minWidth: { xs: 520, sm: "auto" },
+            minWidth: { xs: 560, sm: "auto" },
             minHeight: { xs: 400, sm: 480 },
             borderRadius: 2,
             overflow: "hidden",
@@ -427,15 +469,13 @@ export function CategoriesAdminPage() {
               "& .MuiDataGrid-row": { maxHeight: "unset" },
             }}
             slotProps={{
-              pagination: {
-                labelRowsPerPage: "Rows per page",
-              },
+              pagination: { labelRowsPerPage: "Rows per page" },
             }}
           />
         </Paper>
       </Box>
 
-      <DeleteCategoryDialog
+      <DeletePostDialog
         open={Boolean(deleteId)}
         id={deleteId}
         onClose={() => setDeleteId(null)}
@@ -444,7 +484,7 @@ export function CategoriesAdminPage() {
           void refetch();
         }}
       />
-      <BulkDeleteCategoriesDialog
+      <BulkDeletePostsDialog
         open={bulkDeleteOpen}
         ids={selectedIds}
         rowsById={knownRowsRef.current}
@@ -456,14 +496,10 @@ export function CategoriesAdminPage() {
             setBulkFeedback(
               `Removed ${deleted} of ${total}. Errors:\n${errors.slice(0, 10).join("\n")}${errors.length > 10 ? "\n…" : ""}`
             );
-          } else if (deleted < total) {
-            setBulkFeedback(
-              `Removed ${deleted} of ${total}. Others could not be deleted (for example, they still have posts or subcategories).`
-            );
           } else if (deleted > 0) {
-            setBulkFeedback(`Removed ${deleted} categories.`);
+            setBulkFeedback(`Removed ${deleted} post(s).`);
           } else {
-            setBulkFeedback("No categories were removed.");
+            setBulkFeedback("No posts were removed.");
           }
         }}
       />

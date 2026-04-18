@@ -16,11 +16,16 @@ export function CategoryEditPage() {
   }
 
   return (
-    <Box>
-      <Button component={RouterLink} to={`/categories/${categoryId}`} startIcon={<ArrowBackIcon />} sx={{ mb: 2 }}>
+    <Box sx={{ minWidth: 0 }}>
+      <Button
+        component={RouterLink}
+        to={`/categories/${categoryId}`}
+        startIcon={<ArrowBackIcon />}
+        sx={{ mb: 2, width: { xs: "100%", sm: "auto" } }}
+      >
         Back to category
       </Button>
-      <Typography variant="h5" gutterBottom>
+      <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: "1.25rem", sm: "1.5rem" } }}>
         Edit category
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

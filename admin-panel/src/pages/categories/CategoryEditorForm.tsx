@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   Alert,
-  Box,
   Button,
   FormControl,
   InputLabel,
@@ -143,7 +142,7 @@ export function CategoryEditorForm(props: Props) {
   const title = props.mode === "create" ? "New category" : "Edit category";
 
   return (
-    <Paper variant="outlined" sx={{ p: 3, maxWidth: 560 }}>
+    <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 560, width: "100%" }}>
       <Typography variant="h6" gutterBottom>
         {title}
       </Typography>
@@ -249,14 +248,25 @@ export function CategoryEditorForm(props: Props) {
           />
         </Stack>
       )}
-      <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end", mt: 3 }}>
-        <Button onClick={props.onCancel} disabled={saving}>
+      <Stack
+        direction={{ xs: "column-reverse", sm: "row" }}
+        spacing={1}
+        justifyContent="flex-end"
+        alignItems={{ xs: "stretch", sm: "center" }}
+        sx={{ mt: 3 }}
+      >
+        <Button onClick={props.onCancel} disabled={saving} sx={{ width: { xs: "100%", sm: "auto" } }}>
           Cancel
         </Button>
-        <Button variant="contained" onClick={() => void handleSubmit()} disabled={saving || loadingPrefill}>
+        <Button
+          variant="contained"
+          onClick={() => void handleSubmit()}
+          disabled={saving || loadingPrefill}
+          sx={{ width: { xs: "100%", sm: "auto" } }}
+        >
           Save
         </Button>
-      </Box>
+      </Stack>
     </Paper>
   );
 }
