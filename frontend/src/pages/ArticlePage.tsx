@@ -17,6 +17,7 @@ import { useAppSelector } from "@/store/hooks";
 import type { JSONContent } from "@tiptap/core";
 import { estimateReadMinutesFromPost } from "@/lib/readTime";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { SplitPageLayout } from "@/components/SplitPageLayout";
 import { categoryHref } from "@/lib/routes";
 
 const PostTiptapArticle = lazy(async () => {
@@ -48,15 +49,23 @@ export function ArticlePage() {
 
   const clientRead = useMemo(() => (post ? estimateReadMinutesFromPost(post.content) : 0), [post]);
 
-  if (isLoading) return <p className="text-sm text-ink-muted">Loading article…</p>;
+  if (isLoading) {
+    return (
+      <SplitPageLayout>
+        <p className="text-sm text-ink-muted">Loading article…</p>
+      </SplitPageLayout>
+    );
+  }
   if (isError || !post) {
     return (
-      <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-900/40 dark:bg-amber-950/40">
-        Article not available.{" "}
-        <button type="button" className="underline" onClick={() => void refetch()}>
-          Retry
-        </button>
-      </div>
+      <SplitPageLayout>
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-900/40 dark:bg-amber-950/40">
+          Article not available.{" "}
+          <button type="button" className="underline" onClick={() => void refetch()}>
+            Retry
+          </button>
+        </div>
+      </SplitPageLayout>
     );
   }
 
@@ -83,7 +92,8 @@ export function ArticlePage() {
       : [{ label: "Home", to: "/" }, { label: post.title }];
 
   return (
-    <article className="mx-auto max-w-3xl space-y-8">
+    <SplitPageLayout>
+      <article className="mx-auto max-w-3xl space-y-8">
       <Breadcrumbs items={crumbs} />
       <header className="space-y-3">
         <h1 className="font-serif text-4xl font-semibold leading-tight text-ink dark:text-gray-50">{post.title}</h1>
@@ -234,5 +244,6 @@ export function ArticlePage() {
         </div>
       )}
     </article>
+    </SplitPageLayout>
   );
 }

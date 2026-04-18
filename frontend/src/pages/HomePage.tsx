@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useListPostsQuery } from "@/store/baseApi";
 import { PostCard } from "@/components/PostCard";
-import { HomeSidebar } from "@/components/HomeSidebar";
+import { SplitPageLayout } from "@/components/SplitPageLayout";
 import { categoryHref } from "@/lib/routes";
 
 export function HomePage() {
@@ -14,8 +14,8 @@ export function HomePage() {
   const rest = data ? (page === 1 ? (data.items.length > 1 ? data.items.slice(1) : []) : data.items) : [];
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-10 xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-12">
-      <div className="min-w-0 space-y-10">
+    <SplitPageLayout>
+      <div className="space-y-10">
         <section className="rounded-2xl border border-gray-200/80 bg-gradient-to-br from-white via-gray-50/50 to-emerald-500/[0.07] px-6 py-10 dark:border-gray-800 dark:from-gray-950 dark:via-gray-950 dark:to-emerald-500/10 md:px-10">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-400">Technical blog</p>
           <h1 className="mt-2 max-w-3xl font-serif text-3xl font-semibold tracking-tight text-ink dark:text-gray-50 md:text-4xl lg:text-5xl">
@@ -107,10 +107,6 @@ export function HomePage() {
           )}
         </section>
       </div>
-
-      <div className="mt-12 min-w-0 lg:mt-0">
-        <HomeSidebar />
-      </div>
-    </div>
+    </SplitPageLayout>
   );
 }
