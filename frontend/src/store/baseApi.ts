@@ -1,7 +1,7 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { clearAuth, setAccessToken } from "./authSlice";
-import type { Paginated, PostDetail, PostListItem, PostTag, User } from "@/types";
+import type { CategoriesTreeResponse, Paginated, PostDetail, PostListItem, PostTag, User } from "@/types";
 
 type AuthSliceState = { auth: { accessToken: string | null } };
 
@@ -36,8 +36,12 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 export const baseApi = createApi({
   reducerPath: "api",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["Post", "PostDetail", "Comments", "Likes", "Bookmarks", "Me", "PublicTags"],
+  tagTypes: ["Post", "PostDetail", "Comments", "Likes", "Bookmarks", "Me", "PublicTags", "Categories"],
   endpoints: (build) => ({
+    categoriesTree: build.query<CategoriesTreeResponse, void>({
+      query: () => "/api/categories",
+      providesTags: ["Categories"],
+    }),
     getMe: build.query<{ user: User | null }, void>({
       query: () => "/api/auth/me",
       providesTags: ["Me"],
@@ -67,10 +71,18 @@ export const baseApi = createApi({
         }
       },
     }),
-    listPosts: build.query<Paginated<PostListItem>, { page: number; limit?: number; q?: string }>({
-      query: ({ page, limit = 12, q }) => ({
+    listPosts: build.query<
+      Paginated<PostListItem>,
+      { page: number; limit?: number; q?: string; categorySlug?: string }
+    >({
+      query: ({ page, limit = 12, q, categorySlug }) => ({
         url: "/api/posts",
-        params: { page, limit, ...(q ? { q } : {}) },
+        params: {
+          page,
+          limit,
+          ...(q ? { q } : {}),
+          ...(categorySlug ? { categorySlug } : {}),
+        },
       }),
       keepUnusedDataFor: 120,
       providesTags: (res) =>
@@ -175,6 +187,7 @@ export const baseApi = createApi({
 
 export const {
   useGetMeQuery,
+  useCategoriesTreeQuery,
   usePublicTagsQuery,
   useLoginMutation,
   useRegisterMutation,

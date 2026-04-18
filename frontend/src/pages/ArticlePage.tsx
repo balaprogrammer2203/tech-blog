@@ -16,6 +16,8 @@ import {
 import { useAppSelector } from "@/store/hooks";
 import type { JSONContent } from "@tiptap/core";
 import { estimateReadMinutesFromPost } from "@/lib/readTime";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { categoryHref } from "@/lib/routes";
 
 const PostTiptapArticle = lazy(async () => {
   const m = await import("@/lib/postTiptap/PostTiptapArticle");
@@ -67,8 +69,22 @@ export function ArticlePage() {
     void refetchComments();
   }
 
+  const crumbs =
+    post.category != null
+      ? [
+          { label: "Home", to: "/" },
+          { label: post.category.parent.name },
+          {
+            label: post.category.name,
+            to: categoryHref(post.category.parent.slug, post.category.slug),
+          },
+          { label: post.title },
+        ]
+      : [{ label: "Home", to: "/" }, { label: post.title }];
+
   return (
-    <article className="space-y-8">
+    <article className="mx-auto max-w-3xl space-y-8">
+      <Breadcrumbs items={crumbs} />
       <header className="space-y-3">
         <h1 className="font-serif text-4xl font-semibold leading-tight text-ink dark:text-gray-50">{post.title}</h1>
         <div className="flex flex-wrap gap-3 text-sm text-ink-muted">

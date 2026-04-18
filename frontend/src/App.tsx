@@ -4,6 +4,7 @@ import { SessionBootstrap } from "@/components/SessionBootstrap";
 import { Layout } from "@/components/Layout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { HomePage } from "@/pages/HomePage";
+import { CategoryPage } from "@/pages/CategoryPage";
 import { ArticlePage } from "@/pages/ArticlePage";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
@@ -18,6 +19,7 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<HomePage />} />
+          <Route path="category/:parentSlug/:childSlug" element={<CategoryPage />} />
           <Route path="p/:slug" element={<ArticlePage />} />
           <Route path="login" element={<LoginPage />} />
           <Route path="register" element={<RegisterPage />} />
